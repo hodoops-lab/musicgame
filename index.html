@@ -55,6 +55,8 @@
   .level-card:hover{ border-color:var(--lime); transform:translateY(-2px);}
   .level-card .lv-num{ font-family:'Jua',sans-serif; font-size:20px; color:var(--lime);}
   .level-card .lv-bpm{ font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--muted); margin-top:4px;}
+  .practice-card{ grid-column:1 / -1; border-color:var(--lime); background:linear-gradient(180deg,var(--bg2),var(--bg3)); padding:14px 8px;}
+  .practice-card .lv-num{ font-size:17px;}
   @media (max-width:480px){ .level-grid{ grid-template-columns:repeat(5,1fr); gap:8px;} .level-card{ padding:12px 4px;} }
 
   /* ---------- 드럼 세트 다이어그램 ---------- */
@@ -110,10 +112,10 @@
   .hud .combo{ font-size:12px; color:var(--gold); text-align:right; min-height:16px;}
   .stage-wrap{ position:relative; width:100%; max-width:900px; margin-top:22px; padding:0 10px; cursor:pointer;}
   .score-board{ display:flex; flex-direction:column; gap:12px;}
-  .score-row{ position:relative; width:100%; height:112px; background:linear-gradient(180deg,var(--bg2),var(--bg3)); border-radius:16px; border:1px solid var(--line); overflow:hidden; box-shadow:inset 0 0 30px rgba(0,0,0,.35); transition:border-color .15s ease, box-shadow .15s ease;}
+  .score-row{ position:relative; width:100%; height:80px; background:linear-gradient(180deg,var(--bg2),var(--bg3)); border-radius:16px; border:1px solid var(--line); overflow:hidden; box-shadow:inset 0 0 30px rgba(0,0,0,.35); transition:border-color .15s ease, box-shadow .15s ease;}
   .score-row.active{ border-color:var(--lime); box-shadow:inset 0 0 30px rgba(0,0,0,.35), 0 0 16px rgba(200,255,77,.3);}
   .r-staff-line{ position:absolute; left:4%; right:4%; height:1px; background:rgba(245,243,255,.22);}
-  .row-barline{ position:absolute; top:10px; bottom:10px; width:2px; background:rgba(245,243,255,.35);}
+  .row-barline{ position:absolute; top:6px; bottom:6px; width:2px; background:rgba(245,243,255,.35);}
   .playhead{ position:absolute; top:0; bottom:0; width:3px; background:rgba(245,243,255,.15); box-shadow:none;}
   .score-row.active .playhead{ background:linear-gradient(180deg,transparent,var(--lime),transparent); box-shadow:0 0 14px 2px rgba(200,255,77,.55);}
   .note{ position:absolute; width:40px; height:84px; transform:translate(-50%,-83%); display:flex; align-items:flex-end; justify-content:center;
@@ -122,6 +124,11 @@
   .judge-pop.show{ animation:popup .5s ease forwards;}
   @keyframes popup{ 0%{opacity:0; transform:translate(-50%,10px) scale(.8);} 25%{opacity:1; transform:translate(-50%,-6px) scale(1.05);} 100%{opacity:0; transform:translate(-50%,-26px) scale(1);}}
   .perfect{color:var(--lime);} .good{color:var(--gold);} .miss{color:var(--coral);}
+  .count-in{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-family:'Jua',sans-serif;
+    font-size:min(30vw,120px); color:var(--lime); text-shadow:0 0 40px rgba(200,255,77,.55); pointer-events:none; z-index:8; opacity:0; background:rgba(12,9,32,.35); border-radius:20px;}
+  .count-in.show{ opacity:1;}
+  @keyframes countPop{ 0%{transform:scale(.7); opacity:0;} 30%{transform:scale(1.08); opacity:1;} 100%{transform:scale(1); opacity:1;} }
+  .count-in.show span{ display:inline-block; animation:countPop .3s ease; }
   .progress-track{ width:100%; max-width:900px; padding:0 10px; margin-top:10px;}
   .progress-bar{ height:6px; background:var(--bg2); border-radius:10px; overflow:hidden;}
   .progress-fill{ height:100%; background:var(--lime); width:0%; transition:width .1s linear;}
@@ -206,8 +213,26 @@
       <div class="kit-legend" id="kitLegend"></div>
     </div>
     <div style="display:flex; gap:12px; justify-content:center; margin-top:26px; flex-wrap:wrap;">
-      <button class="btn" id="startStaffQuizBtn">1) 오선보 읽기</button>
+      <button class="btn" id="startLearnBtn">0) 순서대로 학습하기</button>
+      <button class="btn secondary" id="startStaffQuizBtn">1) 오선보 읽기</button>
       <button class="btn secondary" id="startPadQuizBtn">2) 드럼 패드 위치 찾기</button>
+    </div>
+  </div>
+
+  <!-- ============ 1. 악보 매칭: 순서대로 학습하기 ============ -->
+  <div id="noteLearn" class="screen hidden">
+    <div class="linkback" id="backFromNoteLearn">← 메뉴로</div>
+    <div class="eyebrow">학습하기 <span id="learnStep">1</span> / 8</div>
+    <h2 class="stitle" id="learnPartName">킥 드럼</h2>
+    <p class="subtitle" id="learnPartPos">오선 위치</p>
+    <div class="staff-box" id="learnStaffBox"></div>
+    <div class="pad-quiz-box" id="learnPadBox" style="margin-top:18px;">
+      <img id="learnPadImg" alt="드럼 패드 사진">
+      <svg id="learnPadSvg" viewBox="0 0 460 275"></svg>
+    </div>
+    <div style="display:flex; gap:12px; justify-content:center; margin-top:22px;">
+      <button class="btn secondary small" id="learnPrevBtn">← 이전</button>
+      <button class="btn small" id="learnNextBtn">다음 →</button>
     </div>
   </div>
 
@@ -269,6 +294,7 @@
     </div>
     <div class="stage-wrap" id="rStageWrap">
       <div class="judge-pop" id="rJudgePop"></div>
+      <div class="count-in" id="rCountIn"></div>
       <div class="score-board" id="rScoreBoard"></div>
     </div>
     <div class="progress-track"><div class="progress-bar"><div class="progress-fill" id="rProgressFill"></div></div></div>
@@ -338,6 +364,7 @@ var PARTS = {
   kick:  { label:'킥 드럼',     color:'var(--cyan)',   shape:'round', y:SPACE1, pos:'맨 아래 칸' }
 };
 var ORDER = ['crash','ride','hihat','tom1','tom2','snare','tom3','kick'];
+var LEARN_ORDER = ['kick','snare','tom1','tom2','tom3','hihat','crash','ride'];
 
 function buildStaffLines(box){
   box.innerHTML = '';
@@ -447,7 +474,7 @@ function playWrongChord(){
 }
 
 /* ---------------- 화면 전환 ---------------- */
-var ALL_SCREENS = ['menuScreen','noteIntro','noteQuiz','noteResult','rCatSelect','rStageSelect','rGame','rResult'];
+var ALL_SCREENS = ['menuScreen','noteIntro','noteLearn','noteQuiz','noteResult','rCatSelect','rStageSelect','rGame','rResult'];
 function showScreen(id){
   ALL_SCREENS.forEach(function(s){ $(s).classList.add('hidden'); });
   $(id).classList.remove('hidden');
@@ -470,6 +497,49 @@ function buildKitDiagram(){
 }
 function col(name){
   return getComputedStyle(document.documentElement).getPropertyValue('--'+name).trim();
+}
+
+/* =======================================================
+   순서대로 학습하기: 킥 -> 스네어 -> 탐1 -> 탐2 -> 탐3 -> 하이햇 -> 크래시 -> 라이드 순으로
+   한 파트씩 오선 위치 + 패드 위치를 함께 보여주며 넘겨보는 학습 모드
+======================================================= */
+var learnState = { idx: 0 };
+function startNoteLearn(){
+  learnState.idx = 0;
+  renderLearnStep();
+  showScreen('noteLearn');
+}
+function renderLearnStep(){
+  var part = LEARN_ORDER[learnState.idx];
+  var p = PARTS[part];
+  ensureAudio(); playPart(part);
+
+  $('learnStep').textContent = learnState.idx+1;
+  $('learnPartName').textContent = p.label;
+  $('learnPartPos').textContent = '오선보 위치: ' + p.pos;
+
+  var box = $('learnStaffBox');
+  buildStaffLines(box);
+  box.appendChild(makeStaffNote(part));
+
+  var img = $('learnPadImg'); if(!img.src) img.src = PAD_PHOTO_SRC;
+  var svg = $('learnPadSvg'); svg.innerHTML = '';
+  ORDER.forEach(function(k){
+    var pad = PAD_LAYOUT_PHOTO[k];
+    var c = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    c.setAttribute('cx',pad.cx); c.setAttribute('cy',pad.cy); c.setAttribute('r',pad.r);
+    c.setAttribute('class', 'pad-target' + (k===part ? ' correct' : ''));
+    svg.appendChild(c);
+  });
+  var pad = PAD_LAYOUT_PHOTO[part];
+  var t = document.createElementNS('http://www.w3.org/2000/svg','text');
+  t.setAttribute('x', pad.cx); t.setAttribute('y', pad.cy+4);
+  t.setAttribute('class','pad-label');
+  t.textContent = p.label;
+  svg.appendChild(t);
+
+  $('learnPrevBtn').style.visibility = learnState.idx===0 ? 'hidden' : 'visible';
+  $('learnNextBtn').textContent = learnState.idx===LEARN_ORDER.length-1 ? '학습 마치기' : '다음 →';
 }
 /* 업로드해주신 실제 드럼 패드 사진 위의 각 파트 클릭 위치 (사진 픽셀 좌표계, 460x275)
    -> 파란 링 색상을 픽셀 단위로 분석해서 정확한 중심 좌표를 다시 계산했어요 */
@@ -657,21 +727,40 @@ var SIXTEEN_BLOCKS = [
   [{p:'kick',d:0.5},{p:'snare',d:0.5}],
   [{p:'snare',d:0.5},{p:'tom1',d:0.25},{p:'tom1',d:0.25}],  // 코다이 리듬음절: 티 티리 (8분+16분+16분)
   [{p:'tom1',d:0.25},{p:'tom1',d:0.25},{p:'snare',d:0.5}],  // 코다이 리듬음절: 티리 티 (16분+16분+8분)
-  [{p:'tom2',d:0.25},{p:'kick',d:0.5},{p:'tom2',d:0.25}]    // 코다이 리듬음절: 리티 리 (16분+8분+16분, 당김)
+  [{p:'tom2',d:0.25},{p:'kick',d:0.5},{p:'tom2',d:0.25}],   // 코다이 리듬음절: 리티 리 (16분+8분+16분, 당김)
+  // 16분음표 한 박(4칸) 중 한 자리를 쉼표로 비운 패턴들 (예: 첫 16분이 쉼표, 이어서 16분음표 3개)
+  [{p:'rest',d:0.25},{p:'tom1',d:0.25},{p:'tom1',d:0.25},{p:'tom1',d:0.25}],
+  [{p:'tom1',d:0.25},{p:'rest',d:0.25},{p:'tom1',d:0.25},{p:'tom1',d:0.25}],
+  [{p:'tom1',d:0.25},{p:'tom1',d:0.25},{p:'rest',d:0.25},{p:'tom1',d:0.25}],
+  [{p:'tom1',d:0.25},{p:'tom1',d:0.25},{p:'tom1',d:0.25},{p:'rest',d:0.25}],
+  // 8분쉼표 + 16분음표 2개 / 16분음표 2개 + 8분쉼표 (8분쉼표를 활용한 패턴)
+  [{p:'rest',d:0.5},{p:'tom1',d:0.25},{p:'tom1',d:0.25}],
+  [{p:'tom1',d:0.25},{p:'tom1',d:0.25},{p:'rest',d:0.5}]
 ];
 var MIXED_BLOCKS = EIGHT_BLOCKS.concat(SIXTEEN_BLOCKS);
 
+/* 쉼표를 활용한 당김음(싱코페이션) 패턴들 - 9~10단계에서만 기본 블록 풀에 추가되어 난이도를 높인다. */
+var EIGHT_SYNC_BLOCKS = [
+  [{p:'rest',d:0.5},{p:'kick',d:0.5}],   // 8분 쉼표 + 8분음표 (뒷박에 당겨서 들어옴)
+  [{p:'rest',d:0.5},{p:'snare',d:0.5}],
+  [{p:'kick',d:0.5},{p:'rest',d:0.5}]
+];
+var SIXTEEN_SYNC_BLOCKS = [
+  [{p:'tom1',d:0.25},{p:'rest',d:0.25},{p:'rest',d:0.25},{p:'tom1',d:0.25}], // 16th-쉼표-쉼표-16th (당김)
+  [{p:'rest',d:0.25},{p:'tom1',d:0.25},{p:'rest',d:0.25},{p:'tom1',d:0.25}]
+];
+
 var CAT_ORDER = ['eight','sixteen','mixed'];
 var CATS = {
-  eight:   { label:'8비트',         icon:'🥁', desc:'4분음표와 8분음표로 이루어진 기본 리듬', blocks:EIGHT_BLOCKS },
-  sixteen: { label:'16비트',        icon:'⚡', desc:'16분음표가 섞인 촘촘한 리듬',            blocks:SIXTEEN_BLOCKS },
-  mixed:   { label:'8+16비트 혼합', icon:'🔥', desc:'8비트와 16비트가 함께 등장하는 리듬',     blocks:MIXED_BLOCKS }
+  eight:   { label:'8비트',         icon:'🥁', desc:'4분음표와 8분음표로 이루어진 기본 리듬', blocks:EIGHT_BLOCKS, syncBlocks:EIGHT_SYNC_BLOCKS },
+  sixteen: { label:'16비트',        icon:'⚡', desc:'16분음표가 섞인 촘촘한 리듬',            blocks:SIXTEEN_BLOCKS, syncBlocks:SIXTEEN_SYNC_BLOCKS },
+  mixed:   { label:'8+16비트 혼합', icon:'🔥', desc:'8비트와 16비트가 함께 등장하는 리듬',     blocks:MIXED_BLOCKS, syncBlocks:EIGHT_SYNC_BLOCKS.concat(SIXTEEN_SYNC_BLOCKS) }
 };
 var TOTAL_BARS = 16; // 리듬 게임은 항상 16마디
 var ROWS = 4, BARS_PER_ROW = TOTAL_BARS/ROWS; // 화면에 4마디씩 4줄로 표시 (총 16마디를 한 화면에)
-var ROW_STAFF_LINES = [44,56,68,80,92]; // 줄(row) 내부 좌표계에서 오선 5줄 위치
-var ROW_ANCHOR_Y = 74; // 음표가 항상 표시되는 위치(아래서 3번째 칸에 해당)
-var ROW_HEIGHT = 112;
+var ROW_STAFF_LINES = [30,38,46,54,62]; // 줄(row) 내부 좌표계에서 오선 5줄 위치 (8px 간격)
+var ROW_ANCHOR_Y = 50; // 음표가 항상 표시되는 위치(아래서 3번째 칸에 해당)
+var ROW_HEIGHT = 80;
 
 /* 단계별 고정 템포: 1~3단계 60bpm / 4~7단계 70bpm / 8~10단계 75bpm (카테고리 공통) */
 function stageBpm(stage){
@@ -691,7 +780,8 @@ function buildStagePhrases(catKey, stage){
   var cat = CATS[catKey];
   var bpm = stageBpm(stage);
   var barsPerPhrase = 1 + Math.floor((stage-1)/4); // 단계가 오를수록 프레이즈 하나의 마디 수도 늘어남
-  var blocks = cat.blocks;
+  // 9~10단계는 쉼표를 활용한 당김음 패턴을 블록 풀에 추가해서 더 어렵게 만든다
+  var blocks = (stage>=9 && cat.syncBlocks) ? cat.blocks.concat(cat.syncBlocks) : cat.blocks;
   var numPhrases = Math.min(6, 3 + Math.floor((stage-1)/2)); // 3~6개의 서로 다른 변형 프레이즈
   var phrases = [];
   for(var p=0; p<numPhrases; p++){
@@ -738,7 +828,9 @@ function buildNotesFromBars(bars, bpm){
     bar.forEach(function(block){
       gid++;
       block.forEach(function(pt, idx){
-        notes.push({ part:pt.p, dur:pt.d, time:t, barIdx:barIdx, played:false, resolved:false, grade:null,
+        var isRest = pt.p==='rest';
+        notes.push({ part:pt.p, dur:pt.d, time:t, barIdx:barIdx, played:false,
+          resolved:isRest, grade:null, isRest:isRest, // 쉼표는 처음부터 '판정 끝' 상태로 만들어 채점/자동 놓침 대상에서 제외
           el:null, groupId:gid, groupIdx:idx, groupSize:block.length, headEl:null });
         t += pt.d*beatDur;
       });
@@ -760,23 +852,25 @@ function playMetronomeTick(t){
   tone(392.00, now, 0.16, 'sine', 0.35); // G4
 }
 
-var LEAD=2.2, PERFECT_W=0.08, GOOD_W=0.16, MISS_W=0.24;
+var PERFECT_W=0.08, GOOD_W=0.16, MISS_W=0.24;
 var rstate = { catKey:'eight', stage:1, notes:[], ticks:[], rowEls:[], rowDur:0, totalTime:0, activeRow:-1,
-  startAt:0, running:false, score:0, combo:0, counts:{perfect:0,good:0,miss:0} };
+  rows:ROWS, barsPerRow:BARS_PER_ROW, practice:false,
+  startAt:0, running:false, countInTimer:null, score:0, combo:0, counts:{perfect:0,good:0,miss:0} };
 var rScoreBoard, rJudgePop, rScoreNum, rComboNum, rLvNum, rProgressFill;
 
 /* 16마디를 4마디씩 4줄(row)로 나눠서 화면에 한 번에 그려둔다 (스크롤 없이 전체 악보가 보이도록) */
 function buildScoreBoard(){
   var board = rScoreBoard; board.innerHTML=''; rstate.rowEls = [];
-  for(var r=0;r<ROWS;r++){
+  var rows = rstate.rows, barsPerRow = rstate.barsPerRow;
+  for(var r=0;r<rows;r++){
     var row = document.createElement('div'); row.className='score-row';
     ROW_STAFF_LINES.forEach(function(y){
       var l = document.createElement('div'); l.className='r-staff-line'; l.style.top=y+'px';
       row.appendChild(l);
     });
-    for(var k=1;k<BARS_PER_ROW;k++){
+    for(var k=1;k<barsPerRow;k++){
       var bl = document.createElement('div'); bl.className='row-barline';
-      bl.style.left = (4 + (k/BARS_PER_ROW)*92) + '%';
+      bl.style.left = (4 + (k/barsPerRow)*92) + '%';
       row.appendChild(bl);
     }
     var ph = document.createElement('div'); ph.className='playhead'; ph.style.left='4%';
@@ -785,6 +879,12 @@ function buildScoreBoard(){
     rstate.rowEls.push(row);
   }
 
+  /* 한 마디(4박) 폭을 실측해서, 한 박(beat) 안의 음표 그룹이 그 박의 세로줄 폭을 넘지 않게 간격을 정한다.
+     세로 길이(NOTE_BASE_SCALE)는 항상 고정 - 4분/8분/16분음표 모두 키가 같아야 하므로, 좁을 때는
+     음표 사이 가로 간격(spacing)만 줄인다. */
+  var rowWidthPx = board.getBoundingClientRect().width || 860;
+  var beatBudgetPx = (rowWidthPx*0.92/barsPerRow/4) * 0.9;
+
   var fragByRow = rstate.rowEls.map(function(){ return document.createDocumentFragment(); });
   var i = 0;
   while(i < rstate.notes.length){
@@ -792,17 +892,24 @@ function buildScoreBoard(){
     var groupNotes = [];
     while(i < rstate.notes.length && rstate.notes[i].groupId === gid){ groupNotes.push(rstate.notes[i]); i++; }
     var idPrefix = 'ng'+gid;
-    var glyph = noteGroupGlyphSVG(groupNotes.map(function(gn){ return {dur:gn.dur}; }), idPrefix);
+    var n = groupNotes.length;
+    var spacing = NOTE_GROUP_SPACING;
+    if(n>1){
+      var neededSpacing = (beatBudgetPx/NOTE_BASE_SCALE - 44)/(n-1);
+      spacing = Math.max(NOTE_MIN_SPACING, Math.min(NOTE_GROUP_SPACING, neededSpacing));
+    }
+    var glyph = noteGroupGlyphSVG(groupNotes.map(function(gn){ return {dur:gn.dur, isRest:gn.isRest}; }), idPrefix, spacing);
     var first = groupNotes[0];
-    var rowIdx = Math.floor(first.barIdx/BARS_PER_ROW);
+    var rowIdx = Math.floor(first.barIdx/barsPerRow);
     var rowStartTime = rowIdx*rstate.rowDur;
     var xPct = 4 + ((first.time-rowStartTime)/rstate.rowDur)*92;
     var el = document.createElement('div'); el.className='note';
     el.innerHTML = glyph.html;
     el.style.left = xPct+'%';
     el.style.top = ROW_ANCHOR_Y+'px';
-    el.style.width = (glyph.width*40/44)+'px';
-    el.style.transform = 'translate(-16px,-83%)'; // 그룹 폭과 무관하게 항상 '첫 음표'가 기준점
+    el.style.width = (glyph.width*glyph.dispScale)+'px';
+    el.style.height = (92*glyph.dispScale)+'px';
+    el.style.transform = 'translate(-'+(18*glyph.dispScale)+'px,-83%)'; // 그룹 폭과 무관하게 항상 '첫 음표'가 기준점
     fragByRow[rowIdx].appendChild(el);
     groupNotes.forEach(function(gn, idx){
       gn.el = el; gn.rowIdx = rowIdx;
@@ -826,21 +933,40 @@ function durBarWidth(dur){
   return dur===1 ? 26 : dur===0.5 ? 16 : 9;
 }
 var NOTE_GROUP_SPACING = 30; // 그룹 안에서 음표 사이 간격(px, 뷰박스 단위)
-function noteGroupGlyphSVG(members, idPrefix){
+var NOTE_BASE_SCALE = 22/44; // 뷰박스 단위 -> 실제 px 배율 (모든 음표에 항상 동일하게 적용 -> 세로 길이가 늘 같음). 이전보다 절반 크기로 축소.
+var NOTE_MIN_SPACING = 16;   // 한 박에 음표가 몰릴 때 좁힐 수 있는 최소 간격(뷰박스 단위)
+/* dispScale은 항상 NOTE_BASE_SCALE로 고정해서 4분/8분/16분음표의 세로 길이(기둥 높이, 머리 크기)가
+   항상 똑같게 유지한다. 한 박 폭이 좁을 때는 spacing(음표 사이 가로 간격)만 줄여서 맞춘다. */
+function noteGroupGlyphSVG(members, idPrefix, spacing){
+  spacing = spacing || NOTE_GROUP_SPACING;
+  var dispScale = NOTE_BASE_SCALE;
   var n = members.length;
-  var width = 44 + (n-1)*NOTE_GROUP_SPACING;
+  var width = 44 + (n-1)*spacing;
   var parts = [];
   if(n > 1){
-    var hasSixteenth = members.some(function(m){ return m.dur===0.25; });
-    var firstStemX = 29, lastStemX = 29 + (n-1)*NOTE_GROUP_SPACING;
+    var hasSixteenth = members.some(function(m){ return m.dur===0.25 && !m.isRest; });
+    var firstStemX = 29, lastStemX = 29 + (n-1)*spacing;
     parts.push('<line x1="'+firstStemX+'" y1="10" x2="'+lastStemX+'" y2="10" stroke="var(--text)" stroke-width="5" stroke-linecap="round"/>');
     if(hasSixteenth){
       parts.push('<line x1="'+firstStemX+'" y1="21" x2="'+lastStemX+'" y2="21" stroke="var(--text)" stroke-width="5" stroke-linecap="round"/>');
     }
   }
   members.forEach(function(m, i){
+    var nx = 18 + i*spacing, sx = 29 + i*spacing;
+    if(m.isRest){
+      // 쉼표: 실제 악보의 8분/16분 쉼표 모양(대각선 줄기 + 갈고리)을 본떠서 그린다.
+      // 8분쉼표=갈고리 1개, 16분쉼표=갈고리 2개로 서로 구분되게.
+      var hooks = m.dur===0.25 ? 2 : 1;
+      var topY = hooks===2 ? 40 : 46;
+      var stemParts = '<path d="M'+(nx+3)+','+topY+' L'+(nx-3)+',74" stroke="var(--muted)" stroke-width="2.6" stroke-linecap="round" fill="none"/>';
+      for(var h=0; h<hooks; h++){
+        var hy = topY + h*10;
+        stemParts += '<path d="M'+(nx+3)+','+hy+' C'+(nx+10)+','+(hy+2)+' '+(nx+8)+','+(hy+8)+' '+(nx+1)+','+(hy+8)+'" stroke="var(--muted)" stroke-width="2.6" stroke-linecap="round" fill="none"/>';
+      }
+      parts.push('<g id="'+idPrefix+'-'+i+'">'+stemParts+'</g>');
+      return;
+    }
     var color = NOTE_NEUTRAL;
-    var nx = 18 + i*NOTE_GROUP_SPACING, sx = 29 + i*NOTE_GROUP_SPACING;
     var flags = '';
     if(n===1){ // 그룹에 혼자 있는 음표(=4분음표)는 꼬리 없음. 그 외 단독 8분/16분음표는 원래 방식대로 개별 꼬리.
       if(m.dur===0.5){ flags = '<path d="M'+sx+',10 C'+(sx+12)+',14 '+(sx+11)+',27 '+(sx+1)+',33" fill="none" stroke="'+color+'" stroke-width="4.5" stroke-linecap="round"/>'; }
@@ -855,7 +981,7 @@ function noteGroupGlyphSVG(members, idPrefix){
       '<rect x="'+(nx-barW/2)+'" y="87" width="'+barW+'" height="4" rx="2" fill="'+color+'"/>' +
     '</g>');
   });
-  return { html: '<svg viewBox="0 0 '+width+' 92" width="'+(width*40/44)+'" height="84" style="overflow:visible">'+parts.join('')+'</svg>', width: width };
+  return { html: '<svg viewBox="0 0 '+width+' 92" width="'+(width*dispScale)+'" height="'+(92*dispScale)+'" style="overflow:visible">'+parts.join('')+'</svg>', width: width, dispScale: dispScale };
 }
 
 function buildCatGrid(){
@@ -871,6 +997,10 @@ function buildCatGrid(){
 function buildLevelGrid(catKey){
   $('stageCatLabel').textContent = CATS[catKey].label;
   var el = $('rLevelGrid'); el.innerHTML='';
+  var practiceCard = document.createElement('div'); practiceCard.className='level-card practice-card';
+  practiceCard.innerHTML = '<div class="lv-num">학습하기</div><div class="lv-bpm">같은 4마디 반복 연습 · 60 BPM</div>';
+  practiceCard.onclick = function(){ startRPractice(catKey); };
+  el.appendChild(practiceCard);
   for(var s=1; s<=10; s++){
     var bpm = stageBpm(s);
     var card = document.createElement('div'); card.className='level-card';
@@ -896,31 +1026,89 @@ function buildNoteLegend(){
     wrap.appendChild(glyph); wrap.appendChild(lab);
     el.appendChild(wrap);
   });
+  [ {hooks:1, label:'8분쉼표'}, {hooks:2, label:'16분쉼표'} ].forEach(function(r){
+    var restWrap = document.createElement('span'); restWrap.style.display='inline-flex'; restWrap.style.alignItems='center'; restWrap.style.gap='4px';
+    var restGlyph = document.createElement('span'); restGlyph.style.display='inline-block'; restGlyph.style.width='18px'; restGlyph.style.height='38px';
+    var topY = r.hooks===2 ? 40 : 46;
+    var stem = '<path d="M21,'+topY+' L15,74" stroke="var(--muted)" stroke-width="2.6" stroke-linecap="round" fill="none"/>';
+    for(var h=0; h<r.hooks; h++){
+      var hy = topY + h*10;
+      stem += '<path d="M21,'+hy+' C28,'+(hy+2)+' 26,'+(hy+8)+' 19,'+(hy+8)+'" stroke="var(--muted)" stroke-width="2.6" stroke-linecap="round" fill="none"/>';
+    }
+    restGlyph.innerHTML = '<svg viewBox="0 0 44 92" width="18" height="38">'+stem+'</svg>';
+    var restLab = document.createElement('span'); restLab.innerHTML = '<b>'+r.label+' (연주 안 함)</b>';
+    restWrap.appendChild(restGlyph); restWrap.appendChild(restLab);
+    el.appendChild(restWrap);
+  });
 }
 
-function startRLevel(catKey, stage){
+/* 학습하기 연습용: 1단계 패턴 생성 로직을 재사용해서 대표 마디 하나를 뽑아 4마디 내내 반복시킨다. */
+function buildPracticeBars(catKey){
+  var stageDef = buildStagePhrases(catKey, 1);
+  var bar = stageDef.phrases[0][0];
+  return [bar, bar, bar, bar];
+}
+
+function startRLevel(catKey, stage){ startRSession(catKey, stage, false); }
+function startRPractice(catKey){ startRSession(catKey, 1, true); }
+
+function startRSession(catKey, stage, isPractice){
   ensureAudio();
-  rstate.catKey = catKey; rstate.stage = stage;
-  var stageDef = buildStagePhrases(catKey, stage);
-  var bars = flattenBars(stageDef, TOTAL_BARS);
-  var built = buildNotesFromBars(bars, stageDef.bpm);
+  rstate.catKey = catKey; rstate.stage = stage; rstate.practice = !!isPractice;
+  var bpm, bars;
+  if(isPractice){
+    bpm = 60;
+    bars = buildPracticeBars(catKey);
+    rstate.rows = 1; rstate.barsPerRow = 4;
+  } else {
+    var stageDef = buildStagePhrases(catKey, stage);
+    bpm = stageDef.bpm;
+    bars = flattenBars(stageDef, TOTAL_BARS);
+    rstate.rows = ROWS; rstate.barsPerRow = BARS_PER_ROW;
+  }
+  var built = buildNotesFromBars(bars, bpm);
   rstate.notes = built.notes;
   rstate.totalTime = built.totalTime;
-  rstate.rowDur = built.totalTime / ROWS;
-  rstate.ticks = buildMetronomeTicks(stageDef.bpm, built.totalTime);
+  rstate.rowDur = built.totalTime / rstate.rows;
+  rstate.ticks = buildMetronomeTicks(bpm, built.totalTime);
   rstate.activeRow = -1;
   rstate.score=0; rstate.combo=0; rstate.maxCombo=0; rstate.counts={perfect:0,good:0,miss:0};
-  rstate.startAt = actx.currentTime + LEAD + 0.4;
-  rstate.running = true;
+  rstate.running = false;
 
-  buildScoreBoard(); // 16마디 전체를 4줄로 화면에 한 번에 그린다 (스크롤 애니메이션 없음)
+  buildScoreBoard(); // 마디 전체를 화면에 한 번에 그린다 (스크롤 애니메이션 없음)
 
-  $('rLvNum').textContent = CATS[catKey].label+' · '+stage+' / 10';
+  $('rLvNum').textContent = isPractice ? (CATS[catKey].label+' · 학습하기 (반복 연습)') : (CATS[catKey].label+' · '+stage+' / 10');
   $('rScoreNum').textContent='0'; $('rComboNum').textContent='\u00A0';
   $('rProgressFill').style.width='0%';
   buildNoteLegend();
   showScreen('rGame');
-  requestAnimationFrame(rTick);
+
+  /* 예비박 4박: 화면에 4,3,2,1 숫자를 보여주고 박자에 맞춰 메트로놈을 울린 뒤, 그 다음 박(0)부터 실제 게임 시작 */
+  var beatDur = 60/bpm;
+  rstate.startAt = actx.currentTime + COUNT_IN_BEATS*beatDur;
+  for(var ci=0; ci<COUNT_IN_BEATS; ci++){ playMetronomeTick(actx.currentTime + ci*beatDur); }
+  runCountIn(beatDur, function(){
+    rstate.running = true;
+    requestAnimationFrame(rTick);
+  });
+}
+
+var COUNT_IN_BEATS = 4;
+function runCountIn(beatDur, onDone){
+  var el = $('rCountIn');
+  var n = COUNT_IN_BEATS;
+  el.innerHTML = '<span>'+n+'</span>';
+  el.classList.add('show');
+  rstate.countInTimer = setInterval(function(){
+    n--;
+    if(n<=0){
+      clearInterval(rstate.countInTimer); rstate.countInTimer=null;
+      el.classList.remove('show'); el.innerHTML='';
+      onDone();
+      return;
+    }
+    el.innerHTML = '<span>'+n+'</span>';
+  }, beatDur*1000);
 }
 
 var rRunningLoop = false;
@@ -940,7 +1128,7 @@ function rTick(){
   });
 
   /* 노트는 움직이지 않고 고정되어 있고, 재생헤드(playhead)가 현재 마디 줄을 따라 진행한다. */
-  var activeRow = Math.max(0, Math.min(ROWS-1, Math.floor(elapsed/rstate.rowDur)));
+  var activeRow = Math.max(0, Math.min(rstate.rows-1, Math.floor(elapsed/rstate.rowDur)));
   if(activeRow !== rstate.activeRow){
     if(rstate.rowEls[rstate.activeRow]) rstate.rowEls[rstate.activeRow].classList.remove('active');
     rstate.rowEls[activeRow].classList.add('active');
@@ -954,13 +1142,35 @@ function rTick(){
 
   var allResolved = rstate.notes.every(function(n){ return n.resolved; });
   if(allResolved && elapsed > totalDur){
-    rstate.running=false; rRunningLoop=false;
-    setTimeout(finishRLevel, 400);
-    return;
+    if(rstate.practice){
+      // 학습하기 모드: 같은 4마디를 계속 반복 - 시작 시각을 한 바퀴만큼 밀고 판정/색을 초기화
+      rstate.startAt += rstate.totalTime;
+      rstate.activeRow = -1;
+      resetPracticeLoop();
+    } else {
+      rstate.running=false; rRunningLoop=false;
+      setTimeout(finishRLevel, 400);
+      return;
+    }
   }
   requestAnimationFrame(rTick);
 }
-function rStopLoop(){ rstate.running=false; }
+function resetPracticeLoop(){
+  rstate.notes.forEach(function(n){
+    if(n.isRest) return; // 쉼표는 항상 판정 대상에서 제외된 상태 그대로 둔다
+    n.resolved=false; n.grade=null;
+    if(n.headEl){
+      n.headEl.querySelectorAll('[fill]').forEach(function(elx){ if(elx.getAttribute('fill')!=='none') elx.setAttribute('fill', NOTE_NEUTRAL); });
+      n.headEl.querySelectorAll('[stroke]').forEach(function(elx){ elx.setAttribute('stroke', NOTE_NEUTRAL); });
+    }
+  });
+  rstate.ticks.forEach(function(tk){ tk.played=false; });
+}
+function rStopLoop(){
+  rstate.running=false;
+  if(rstate.countInTimer){ clearInterval(rstate.countInTimer); rstate.countInTimer=null; }
+  $('rCountIn').classList.remove('show'); $('rCountIn').innerHTML='';
+}
 
 /* 채점 결과에 따라 음표 색을 바꾼다: 정답(완벽/좋음)=초록, 오답(놓침)=빨강.
    음표는 사라지지 않고 그대로 남아 방금 푼 문제의 정답/오답을 계속 보여준다. */
@@ -1036,11 +1246,18 @@ function init(){
   $('goRhythmBtn').onclick = function(){ buildCatGrid(); showScreen('rCatSelect'); };
 
   $('backFromNoteIntro').onclick = goMenu;
+  $('backFromNoteLearn').onclick = goMenu;
   $('backFromNoteQuiz').onclick = goMenu;
   $('backFromCatSelect').onclick = goMenu;
   $('backFromStageSelect').onclick = function(){ buildCatGrid(); showScreen('rCatSelect'); };
   $('backFromRGame').onclick = goMenu;
 
+  $('startLearnBtn').onclick = startNoteLearn;
+  $('learnPrevBtn').onclick = function(){ if(learnState.idx>0){ learnState.idx--; renderLearnStep(); } };
+  $('learnNextBtn').onclick = function(){
+    if(learnState.idx < LEARN_ORDER.length-1){ learnState.idx++; renderLearnStep(); }
+    else { showScreen('noteIntro'); }
+  };
   $('startStaffQuizBtn').onclick = function(){ startQuiz('staff'); };
   $('startPadQuizBtn').onclick = function(){ startQuiz('pad'); };
   $('noteRetryBtn').onclick = function(){ startQuiz(quiz.mode); };
