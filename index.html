@@ -7,6 +7,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Jua&family=Noto+Sans+KR:wght@400;500;700;900&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<!-- Firebase JS SDK (Compat mode for standalone HTML) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <style>
   :root{
     --bg:#14102b; --bg2:#1c1740; --bg3:#241d52; --line:#352b6e;
@@ -35,6 +39,9 @@
   .linkback:hover{ color:var(--text);}
   .rgame-topbar{ position:fixed; top:16px; left:18px; display:flex; gap:8px; z-index:20;}
   .rgame-topbar .linkback{ position:static; top:auto; left:auto;}
+  .stage-badge{ position:fixed; top:14px; left:50%; transform:translateX(-50%); z-index:20;
+    font-family:'Jua',sans-serif; font-size:16px; color:#14102b; background:var(--lime);
+    padding:6px 18px; border-radius:20px; box-shadow:0 3px 10px rgba(0,0,0,.35); white-space:nowrap;}
 
   /* ---------- 메뉴 ---------- */
   .mode-cards{ display:flex; gap:22px; margin-top:36px; flex-wrap:wrap; justify-content:center; max-width:760px;}
@@ -118,6 +125,10 @@
   .score-row.active{ border-color:var(--lime); box-shadow:inset 0 0 30px rgba(0,0,0,.35), 0 0 16px rgba(200,255,77,.3);}
   .r-staff-line{ position:absolute; left:4%; right:4%; height:1px; background:rgba(245,243,255,.22);}
   .row-barline{ position:absolute; top:6px; bottom:6px; width:2px; background:rgba(245,243,255,.35);}
+  .row-label{ position:absolute; left:4px; top:4px; width:20px; height:20px; border-radius:50%; background:var(--lime); color:#14102b;
+    font-family:'Jua',sans-serif; font-size:12px; display:flex; align-items:center; justify-content:center; z-index:6; box-shadow:0 2px 6px rgba(0,0,0,.4);}
+  .row-label-clickable{ cursor:pointer; width:26px; height:26px; font-size:14px; transition:transform .1s ease;}
+  .row-label-clickable:hover{ transform:scale(1.15);}
   .row-beams{ position:absolute; inset:0; width:100%; height:100%; pointer-events:none;}
   .playhead{ position:absolute; top:0; bottom:0; width:3px; background:rgba(245,243,255,.15); box-shadow:none;}
   .score-row.active .playhead{ background:linear-gradient(180deg,transparent,var(--lime),transparent); box-shadow:0 0 14px 2px rgba(200,255,77,.55);}
@@ -155,6 +166,8 @@
   body.touch .tap-hint.kbd{ display:none; }
   body:not(.touch) .tap-hint.touchonly{ display:none; }
   body.touch .space-btn{ display:inline-block; }
+  .landscape-hint{ display:none; color:var(--gold); font-size:12px; text-align:center; margin:8px 0 0; }
+  body.touch .landscape-hint{ display:block; }
 
   @media (max-width: 680px){
     .screen{ padding:14px; }
@@ -180,6 +193,40 @@
     .btn:hover, .choice-btn:hover, .level-card:hover, .cat-card:hover, .pad-target:hover, .linkback:hover{ /* 터치 기기에서는 hover 대신 active로 피드백 */ }
     .btn:active, .choice-btn:active{ opacity:0.85; }
   }
+
+  /* ---------- 유저 상단 바 & 회원가입/로그인 모달 ---------- */
+  .user-bar{ display:flex; align-items:center; justify-content:space-between; width:100%; max-width:760px; background:var(--bg2); border:1px solid var(--line); border-radius:18px; padding:12px 20px; margin-bottom:20px; box-shadow:0 4px 15px rgba(0,0,0,.2); flex-wrap:wrap; gap:10px; }
+  .user-info{ display:flex; align-items:center; gap:12px; font-family:'Jua',sans-serif; font-size:16px; }
+  .user-badge{ background:var(--bg3); border:1px solid var(--line); border-radius:12px; padding:4px 12px; font-size:14px; color:var(--lime); font-family:'IBM Plex Mono',monospace; }
+  .user-actions{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  
+  .modal-overlay{ position:fixed; inset:0; background:rgba(12,9,32,0.82); backdrop-filter:blur(8px); display:flex; align-items:center; justify-content:center; z-index:100; opacity:0; pointer-events:none; transition:opacity .2s ease; padding:16px; }
+  .modal-overlay.show{ opacity:1; pointer-events:auto; }
+  .modal-box{ background:var(--bg2); border:2px solid var(--line); border-radius:24px; padding:28px 24px; width:100%; max-width:440px; box-shadow:0 15px 35px rgba(0,0,0,0.6); position:relative; transform:scale(0.92); transition:transform .2s ease; max-height:90vh; overflow-y:auto; }
+  .modal-overlay.show .modal-box{ transform:scale(1); }
+  .modal-close{ position:absolute; top:16px; right:18px; font-size:24px; color:var(--muted); cursor:pointer; background:none; border:none; line-height:1; }
+  .modal-close:hover{ color:var(--text); }
+  
+  .auth-tabs{ display:flex; gap:10px; border-bottom:2px solid var(--line); margin-bottom:20px; padding-bottom:8px; }
+  .auth-tab{ font-family:'Jua',sans-serif; font-size:18px; color:var(--muted); background:none; border:none; cursor:pointer; padding:6px 12px; border-radius:8px; transition:.15s ease; }
+  .auth-tab.active{ color:var(--lime); background:var(--bg3); border-bottom:2px solid var(--lime); }
+  
+  .form-group{ margin-bottom:16px; text-align:left; }
+  .form-label{ font-size:13px; color:var(--muted); font-family:'IBM Plex Mono',monospace; margin-bottom:6px; display:block; }
+  .form-input{ width:100%; background:var(--bg3); border:1px solid var(--line); border-radius:12px; padding:12px 14px; color:var(--text); font-size:15px; font-family:'Noto Sans KR',sans-serif; outline:none; transition:border-color .15s ease; }
+  .form-input:focus{ border-color:var(--lime); }
+  
+  .auth-msg{ font-size:13px; font-family:'Noto Sans KR',sans-serif; margin-top:12px; padding:10px 14px; border-radius:10px; display:none; }
+  .auth-msg.error{ display:block; background:rgba(255,93,115,0.15); border:1px solid var(--coral); color:var(--coral); }
+  .auth-msg.success{ display:block; background:rgba(200,255,77,0.15); border:1px solid var(--lime); color:var(--lime); }
+
+  .rank-table{ width:100%; border-collapse:collapse; margin-top:16px; font-size:14px; }
+  .rank-table th{ font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--muted); padding:10px 8px; border-bottom:1px solid var(--line); text-align:center; }
+  .rank-table td{ padding:12px 8px; border-bottom:1px solid rgba(53,43,110,0.5); text-align:center; }
+  .rank-badge{ font-family:'Jua',sans-serif; font-size:14px; display:inline-block; width:24px; height:24px; line-height:24px; border-radius:50%; background:var(--bg3); }
+  .rank-1{ background:var(--gold); color:#14102b; }
+  .rank-2{ background:#e0e0e0; color:#14102b; }
+  .rank-3{ background:#cd7f32; color:#14102b; }
 </style>
 </head>
 <body>
@@ -187,9 +234,23 @@
 
   <!-- ============ 메뉴 ============ -->
   <div id="menuScreen" class="screen">
+    <!-- 상단 유저 정보 & 랭킹 바 -->
+    <div class="user-bar">
+      <div class="user-info">
+        <span id="userDisplayName">👤 게스트 (랭킹 미등록)</span>
+        <span class="user-badge" id="userScoreBadge">자유 플레이</span>
+      </div>
+      <div class="user-actions">
+        <button class="btn secondary small" id="openRankBtn" type="button">🏆 랭킹</button>
+        <button class="btn secondary small hidden" id="openAdminBtn" type="button" style="border-color:var(--gold); color:var(--gold);">👥 회원 관리</button>
+        <button class="btn small" id="openAuthBtn" type="button">로그인 / 회원가입</button>
+        <button class="btn secondary small hidden" id="logoutBtn" type="button">로그아웃</button>
+      </div>
+    </div>
     <div class="eyebrow">드럼으로 배우는 리듬 수업</div>
     <h1 class="title">드럼 마스터</h1>
     <p class="subtitle">드럼 세트 명칭과 악보 표기를 익히고,<br>실제 리듬을 손으로 연주해보는 두 가지 게임이에요.</p>
+    <p class="landscape-hint">📱 화면 가로 보기 설정을 하면 더 편하게 즐길 수 있어요</p>
     <div class="mode-cards">
       <div class="mode-card">
         <div class="icon">🥁</div>
@@ -297,6 +358,7 @@
       <div class="linkback" id="rPauseBtn">⏸ 일시정지</div>
       <div class="linkback" id="rResumeBtn">▶ 계속하기</div>
     </div>
+    <div class="stage-badge" id="rStageBadge">1단계</div>
     <div class="hud">
       <div class="lv" id="rLvNum">8비트 · 1 / 10</div>
       <div class="score" id="rScoreNum">0</div>
@@ -309,7 +371,7 @@
     </div>
     <div class="progress-track"><div class="progress-bar"><div class="progress-fill" id="rProgressFill"></div></div></div>
     <div class="tap-hint kbd" style="margin-top:10px;">SPACE 또는 화면을 클릭하세요</div>
-    <div class="tap-hint touchonly" style="margin-top:10px;">화면을 터치하세요</div>
+    <div class="tap-hint touchonly" style="margin-top:10px;">모바일로 진행 시 리듬을 읽으며 화면을 터치하세요</div>
     <button class="btn space-btn" id="rSpaceBtn" type="button">스페이스</button>
     <div class="mini-legend" id="rNoteLegend" style="margin-top:10px;"></div>
   </div>
@@ -330,6 +392,154 @@
         <button class="btn secondary small" id="rRetryBtn">다시하기</button>
         <button class="btn small" id="rNextBtn">다음 단계</button>
       </div>
+    </div>
+  </div>
+
+  <!-- ============ 파이어베이스 회원가입 / 로그인 모달 ============ -->
+  <div id="authModal" class="modal-overlay">
+    <div class="modal-box">
+      <button class="modal-close" id="closeAuthModal">&times;</button>
+      <div class="auth-tabs">
+        <button class="auth-tab active" id="tabLogin" type="button">로그인</button>
+        <button class="auth-tab" id="tabSignup" type="button">회원가입</button>
+      </div>
+      
+      <!-- 로그인 폼 -->
+      <form id="loginForm">
+        <div class="form-group">
+          <label class="form-label" for="loginEmail">이메일 또는 학번/아이디</label>
+          <input type="text" id="loginEmail" class="form-input" placeholder="student@school.com 또는 학번/아이디" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="loginPassword">비밀번호</label>
+          <input type="password" id="loginPassword" class="form-input" placeholder="비밀번호 입력" required>
+        </div>
+        <button type="submit" class="btn small" style="width:100%; margin-top:8px;">로그인</button>
+      </form>
+
+      <!-- 회원가입 폼 -->
+      <form id="signupForm" class="hidden">
+        <div class="form-group">
+          <label class="form-label" for="signupName">이름</label>
+          <input type="text" id="signupName" class="form-input" placeholder="예: 홍길동" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="signupId">아이디 (학번)</label>
+          <input type="text" id="signupId" class="form-input" placeholder="예: 20101 또는 student01" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="signupSchool">학교명</label>
+          <input type="text" id="signupSchool" class="form-input" placeholder="예: 서울중학교" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="signupPassword">비밀번호 (6자리 이상)</label>
+          <input type="password" id="signupPassword" class="form-input" placeholder="비밀번호 입력" required minlength="6">
+        </div>
+        <button type="submit" class="btn small" style="width:100%; margin-top:8px;">회원가입 완료</button>
+      </form>
+
+      <div id="authMsg" class="auth-msg"></div>
+      <div style="margin-top:16px; text-align:right;">
+        <button type="button" id="openConfigBtn" style="background:none; border:none; color:var(--muted); font-size:11px; cursor:pointer; text-decoration:underline;">⚙️ Firebase API Key 설정</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 랭킹 / 리더보드 모달 ============ -->
+  <div id="rankingModal" class="modal-overlay">
+    <div class="modal-box" style="max-width:560px;">
+      <button class="modal-close" id="closeRankModal">&times;</button>
+      <h2 class="stitle" style="text-align:center;">🏆 드럼 마스터 명예의 전당</h2>
+      <div class="auth-tabs" style="justify-content:center; margin-top:12px;">
+        <button class="auth-tab active" id="rankTabQuiz" type="button">악보 매칭 랭킹</button>
+        <button class="auth-tab" id="rankTabRhythm" type="button">리듬 게임 랭킹</button>
+      </div>
+      <div id="rankListContainer" style="max-height:360px; overflow-y:auto;">
+        <table class="rank-table">
+          <thead>
+            <tr>
+              <th>순위</th>
+              <th>이름 / 학번</th>
+              <th>점수 / 성적</th>
+              <th>날짜</th>
+            </tr>
+          </thead>
+          <tbody id="rankTableBody">
+            <tr><td colspan="4" style="color:var(--muted); padding:20px;">랭킹 불러오는 중...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ Firebase Config 설정 모달 ============ -->
+  <div id="configModal" class="modal-overlay">
+    <div class="modal-box">
+      <button class="modal-close" id="closeConfigModal">&times;</button>
+      <h3 style="font-family:'Jua',sans-serif; margin-top:0;">⚙️ Firebase API Key 설정</h3>
+      <p style="font-size:12px; color:var(--muted); line-height:1.5;">Realtime Database URL이 연동되어 있습니다.<br>Firebase Auth용 API Key를 등록하면 파이어베이스 계정이 정식 연동됩니다.</p>
+      <div class="form-group">
+        <label class="form-label" for="cfgApiKey">Firebase API Key</label>
+        <input type="text" id="cfgApiKey" class="form-input" placeholder="AIzaSy...">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="cfgDbUrl">Realtime Database URL</label>
+        <input type="text" id="cfgDbUrl" class="form-input" value="https://drum-game-4755e-default-rtdb.asia-southeast1.firebasedatabase.app/">
+      </div>
+      <button type="button" class="btn small" id="saveConfigBtn" style="width:100%;">저장 후 재연동</button>
+    </div>
+  </div>
+
+  <!-- ============ 관리자 회원 관리 모달 ============ -->
+  <div id="adminModal" class="modal-overlay">
+    <div class="modal-box" style="max-width:720px;">
+      <button class="modal-close" id="closeAdminModal">&times;</button>
+      <h2 class="stitle" style="text-align:center;">👑 회원 관리 (관리자 전용)</h2>
+      <p style="font-size:12px; color:var(--muted); text-align:center; margin-bottom:14px;">등록된 가입 회원 목록을 조회하고 계정 정보를 수정하거나 삭제할 수 있습니다.</p>
+      <div id="adminUserContainer" style="max-height:400px; overflow-y:auto;">
+        <table class="rank-table">
+          <thead>
+            <tr>
+              <th>번호</th>
+              <th>이름</th>
+              <th>아이디 (학번)</th>
+              <th>학교명</th>
+              <th>총점</th>
+              <th>가입일</th>
+              <th>관리</th>
+            </tr>
+          </thead>
+          <tbody id="adminUserTableBody">
+            <tr><td colspan="7" style="color:var(--muted); padding:20px;">회원 정보 불러오는 중...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 회원 정보 수정 모달 ============ -->
+  <div id="editUserModal" class="modal-overlay">
+    <div class="modal-box" style="max-width:400px;">
+      <button class="modal-close" id="closeEditUserModal">&times;</button>
+      <h3 style="font-family:'Jua',sans-serif; margin-top:0;">✏️ 회원 정보 수정</h3>
+      <input type="hidden" id="editUid">
+      <div class="form-group">
+        <label class="form-label" for="editName">이름</label>
+        <input type="text" id="editName" class="form-input" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="editStudentId">아이디 (학번)</label>
+        <input type="text" id="editStudentId" class="form-input" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="editSchool">학교명</label>
+        <input type="text" id="editSchool" class="form-input" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="editPassword">비밀번호 (변경시에만 입력)</label>
+        <input type="password" id="editPassword" class="form-input" placeholder="새 비밀번호 (선택사항)">
+      </div>
+      <button type="button" class="btn small" id="saveUserEditBtn" style="width:100%;">저장하기</button>
     </div>
   </div>
 
@@ -709,6 +919,10 @@ function finishQuiz(){
   $('noteStars').textContent = '★★★'.slice(0,starN) + '☆☆☆'.slice(0,3-starN);
   $('noteCorrect').textContent = quiz.correct;
   $('noteTotal').textContent = total;
+  
+  var qScore = quiz.correct * 10;
+  saveGameScore('quiz', { score: qScore, detail: quiz.correct + '/' + total + '개 정답' });
+
   showScreen('noteResult');
 }
 
@@ -751,8 +965,11 @@ var EIGHT_SYNC_BLOCKS = [
   [{p:'rest',d:0.5},{p:'snare',d:0.5}],
   [{p:'kick',d:0.5},{p:'rest',d:0.5}]
 ];
+var QUARTER_REST_BLOCK = [{p:'rest',d:1}]; // 4분쉼표
+/* 16분음표+16분쉼표+16분쉼표+16분음표는 실제로는 점8분음표+16분음표와 리듬이 같아서(공격 시점이 동일)
+   더 표준적인 점8분음표+16분음표 표기로 바꿨다. */
 var SIXTEEN_SYNC_BLOCKS = [
-  [{p:'tom1',d:0.25},{p:'rest',d:0.25},{p:'rest',d:0.25},{p:'tom1',d:0.25}], // 16th-쉼표-쉼표-16th (당김)
+  [{p:'tom1',d:0.75},{p:'tom1',d:0.25}], // 점8분음표 + 16분음표 (당김)
   [{p:'rest',d:0.25},{p:'tom1',d:0.25},{p:'rest',d:0.25},{p:'tom1',d:0.25}]
 ];
 
@@ -784,23 +1001,68 @@ function sixteenSpecialsForStage(stage){
 function sixteenStageBpm(stage){
   return stage<=8 ? 60 : 70;
 }
-/* 8+16비트 혼합 카테고리: 단계가 오를수록 16분 리듬꼴의 가짓수와 한 마디 안의 등장 횟수를 늘려서
-   점점 더 심화된 문제가 되도록 한다. */
-function mixedSpecialsForStage(stage){
-  if(stage<=2) return [PATTERN_16TH_ALL4];
-  if(stage<=4) return [PATTERN_16TH_ALL4, PATTERN_16TH_DIDITA];
-  if(stage<=6) return [PATTERN_16TH_ALL4, PATTERN_16TH_DIDITA, PATTERN_16TH_TADIDI];
-  if(stage<=8) return [PATTERN_16TH_ALL4, PATTERN_16TH_DIDITA, PATTERN_16TH_TADIDI, PATTERN_16TH_SYNCO];
-  return [PATTERN_16TH_ALL4, PATTERN_16TH_DIDITA, PATTERN_16TH_TADIDI, PATTERN_16TH_SYNCO]
-    .concat(PATTERN_16TH_REST_VARIANTS, SIXTEEN_SYNC_BLOCKS, EIGHT_SYNC_BLOCKS);
+/* 8+16비트 혼합 카테고리: 예전 5단계 수준(8분쉼표·16분음표 각 2개)을 1단계 기본값으로 삼고,
+   1단계부터 16분 리듬꼴 4종류를 전부 다양하게 섞어 쓰며, 단계가 오를수록 등장 횟수와 리듬꼴 가짓수
+   (쉼표변형·당김음까지)를 계속 늘려서 점점 더 심화된다. 4분쉼표도 매 단계 조금씩 섞는다. */
+function mixedTierForStage(stage){
+  if(stage<=2) return { eighthCount:2, sixteenCount:2, quarterRestCount:1, poolTier:4 };
+  if(stage<=4) return { eighthCount:2, sixteenCount:3, quarterRestCount:1, poolTier:4 };
+  if(stage<=6) return { eighthCount:3, sixteenCount:3, quarterRestCount:2, poolTier:5 };
+  if(stage<=8) return { eighthCount:3, sixteenCount:4, quarterRestCount:2, poolTier:5 };
+  return { eighthCount:4, sixteenCount:4, quarterRestCount:3, poolTier:5 };
 }
-function mixedSpecialCountForStage(stage){
-  if(stage<=2) return 1;
-  if(stage<=4) return 1;
-  if(stage<=6) return 2;
-  if(stage<=8) return 2;
-  return 3;
+function mixedSixteenPoolForTier(poolTier){
+  if(poolTier===1) return [PATTERN_16TH_ALL4];
+  if(poolTier===2) return [PATTERN_16TH_ALL4, PATTERN_16TH_DIDITA];
+  if(poolTier===3) return [PATTERN_16TH_ALL4, PATTERN_16TH_DIDITA, PATTERN_16TH_TADIDI];
+  if(poolTier===4) return [PATTERN_16TH_ALL4, PATTERN_16TH_DIDITA, PATTERN_16TH_TADIDI, PATTERN_16TH_SYNCO];
+  return [PATTERN_16TH_ALL4, PATTERN_16TH_DIDITA, PATTERN_16TH_TADIDI, PATTERN_16TH_SYNCO].concat(PATTERN_16TH_REST_VARIANTS, SIXTEEN_SYNC_BLOCKS);
 }
+function buildMixedBars(stage){
+  var tier = mixedTierForStage(stage);
+  var eighthPool = EIGHT_SYNC_BLOCKS;
+  var sixteenPool = mixedSixteenPoolForTier(tier.poolTier);
+  var quarterRestPool = [QUARTER_REST_BLOCK];
+  var fillers = EIGHT_BLOCKS;
+  var rowsCount = TOTAL_BARS/BARS_PER_ROW; // 4
+  var eighthCounter=0, sixteenCounter=0, qRestCounter=0, fillerCounter=0;
+  var bars = [];
+  for(var r=0; r<rowsCount; r++){
+    var totalSlots = BARS_PER_ROW*4; // 4마디 x 4박 = 16박
+    var slotOrder = [];
+    for(var s=0;s<totalSlots;s++) slotOrder.push(s);
+    var rot = (r*7+3) % totalSlots; // 줄마다 배치 위치를 돌려서 같은 흐름이 반복되지 않게
+    slotOrder = slotOrder.slice(rot).concat(slotOrder.slice(0,rot));
+    var specialAt = {};
+    var si=0;
+    for(var e=0;e<tier.eighthCount;e++){ specialAt[slotOrder[si++]] = 'eighth'; }
+    for(var k=0;k<tier.sixteenCount;k++){ specialAt[slotOrder[si++]] = 'sixteen'; }
+    for(var q=0;q<tier.quarterRestCount;q++){ specialAt[slotOrder[si++]] = 'qrest'; }
+    for(var b=0;b<BARS_PER_ROW;b++){
+      var bar=[];
+      for(var i=0;i<4;i++){
+        var slot=b*4+i, block;
+        if(specialAt[slot]==='eighth'){ block=eighthPool[eighthCounter%eighthPool.length]; eighthCounter++; }
+        else if(specialAt[slot]==='sixteen'){ block=sixteenPool[sixteenCounter%sixteenPool.length]; sixteenCounter++; }
+        else if(specialAt[slot]==='qrest'){ block=quarterRestPool[qRestCounter%quarterRestPool.length]; qRestCounter++; }
+        else { block=fillers[fillerCounter%fillers.length]; fillerCounter++; }
+        bar.push(block);
+      }
+      bars.push(bar);
+    }
+  }
+  return bars;
+}
+
+/* 8비트 카테고리: 총 5단계까지만 사용한다.
+   1단계=4분+8분음표만, 2~3단계=+4분쉼표, 4~5단계=+8분쉼표까지. */
+function eightBlocksForStage(stage){
+  if(stage===1) return EIGHT_BLOCKS;
+  if(stage<=3) return EIGHT_BLOCKS.concat([QUARTER_REST_BLOCK]);
+  return EIGHT_BLOCKS.concat([QUARTER_REST_BLOCK], EIGHT_SYNC_BLOCKS);
+}
+var STAGES_PER_CAT = { eight:5, sixteen:10, mixed:10 };
+function stagesForCat(catKey){ return STAGES_PER_CAT[catKey] || 10; }
 
 var CAT_ORDER = ['eight','sixteen','mixed'];
 var CATS = {
@@ -831,28 +1093,34 @@ var PHRASE_MULT = [1,3,5,7,11,13];
    specialCount개의 박에만 배치하고, 나머지 박은 4분/8분음표(EIGHT_BLOCKS)로 채운다.
    forceLastQuarter가 true면 마지막 박은 항상 4분음표로 고정(16비트 카테고리 전용 - 16분음표 묶음이
    마디를 넘어가지 않게). 어느 박에 special을 배치할지는 마디/프레이즈 번호에 따라 돌아가며 바뀐다. */
+/* numPhrases*barsPerPhrase가 항상 TOTAL_BARS(16) 이상이 되게 해서, flattenBars가 마디를 다시
+   돌아가며 반복하지 않아도 되게 한다 - 그래야 4마디(한 줄)씩 4줄이 전부 다른 흐름으로 보인다.
+   specials 풀은 (반복 없는) 전역 카운터로 순서대로 소진하며 골라서, 풀에 있는 리듬꼴이 전부
+   실제로 등장하도록 보장한다(예전엔 위치 기반 나머지 연산이라 일부 리듬꼴이 통째로 빠지곤 했다). */
 function buildSpecialMixPhrases(stage, specials, specialCount, forceLastQuarter, bpmOverride){
   var bpm = bpmOverride || stageBpm(stage);
   var fillers = EIGHT_BLOCKS;
   var barsPerPhrase = 1 + Math.floor((stage-1)/4);
-  var numPhrases = Math.min(6, 3 + Math.floor((stage-1)/2));
+  var numPhrases = Math.ceil(TOTAL_BARS/barsPerPhrase);
   var beatSlots = forceLastQuarter ? [0,1,2] : [0,1,2,3];
+  var specialCounter = 0, fillerCounter = 0;
   var phrases = [];
   for(var p=0; p<numPhrases; p++){
     var phraseBars = [];
     for(var b=0; b<barsPerPhrase; b++){
-      var rot = (b+p) % beatSlots.length;
+      var globalBar = p*barsPerPhrase+b;
+      var rot = globalBar % beatSlots.length;
       var rotatedSlots = beatSlots.slice(rot).concat(beatSlots.slice(0,rot));
       var specialSet = rotatedSlots.slice(0, Math.min(specialCount, beatSlots.length));
       var bar = [];
       for(var i=0;i<4;i++){
         var block;
         if(i===3 && forceLastQuarter){
-          block = (b+p)%2===0 ? [{p:'kick',d:1}] : [{p:'snare',d:1}];
+          block = globalBar%2===0 ? [{p:'kick',d:1}] : [{p:'snare',d:1}];
         } else if(specialSet.indexOf(i)!==-1){
-          block = specials[(b*3+i+p*2) % specials.length];
+          block = specials[specialCounter % specials.length]; specialCounter++;
         } else {
-          block = fillers[(b*5+i*2+p) % fillers.length];
+          block = fillers[fillerCounter % fillers.length]; fillerCounter++;
         }
         bar.push(block);
       }
@@ -868,14 +1136,13 @@ function buildStagePhrases(catKey, stage){
     return buildSpecialMixPhrases(stage, sixteenSpecialsForStage(stage), 1, true, sixteenStageBpm(stage));
   }
   if(catKey==='mixed'){
-    return buildSpecialMixPhrases(stage, mixedSpecialsForStage(stage), mixedSpecialCountForStage(stage), false);
+    return { bpm: stageBpm(stage), phrases: [buildMixedBars(stage)] };
   }
-  var cat = CATS[catKey];
+  // 'eight' 카테고리 (총 5단계)
   var bpm = stageBpm(stage);
   var barsPerPhrase = 1 + Math.floor((stage-1)/4); // 단계가 오를수록 프레이즈 하나의 마디 수도 늘어남
-  // 9~10단계는 쉼표를 활용한 당김음 패턴을 블록 풀에 추가해서 더 어렵게 만든다
-  var blocks = (stage>=9 && cat.syncBlocks) ? cat.blocks.concat(cat.syncBlocks) : cat.blocks;
-  var numPhrases = Math.min(6, 3 + Math.floor((stage-1)/2)); // 3~6개의 서로 다른 변형 프레이즈
+  var blocks = eightBlocksForStage(stage);
+  var numPhrases = Math.ceil(TOTAL_BARS/barsPerPhrase); // 16마디 전체가 겹치지 않게
   var phrases = [];
   for(var p=0; p<numPhrases; p++){
     var mult = PHRASE_MULT[p % PHRASE_MULT.length];
@@ -883,7 +1150,7 @@ function buildStagePhrases(catKey, stage){
     for(var b=0; b<barsPerPhrase; b++){
       var bar = [];
       for(var i=0;i<4;i++){ // 한 마디 = 4박(블록 4개, 블록 하나는 항상 1박)
-        var idx = ((b*4+i)*mult + stage*2 + p*4) % blocks.length;
+        var idx = ((b*4+i)*mult + p*7 + stage*2) % blocks.length;
         bar.push(blocks[idx]);
       }
       phraseBars.push(bar);
@@ -940,7 +1207,7 @@ function playMetronomeTick(t){
 
 var PERFECT_W=0.08, GOOD_W=0.16, MISS_W=0.24;
 var rstate = { catKey:'eight', stage:1, notes:[], ticks:[], rowEls:[], rowDur:0, totalTime:0, activeRow:-1,
-  rows:ROWS, barsPerRow:BARS_PER_ROW, practice:false, paused:false,
+  rows:ROWS, barsPerRow:BARS_PER_ROW, practice:false, paused:false, rowLabels:null,
   startAt:0, running:false, countInTimer:null, score:0, combo:0, counts:{perfect:0,good:0,miss:0} };
 var rScoreBoard, rJudgePop, rScoreNum, rComboNum, rLvNum, rProgressFill;
 
@@ -967,6 +1234,18 @@ function buildScoreBoard(){
     row._beamSvg = beamSvg;
     var ph = document.createElement('div'); ph.className='playhead'; ph.style.left='4%';
     row.appendChild(ph);
+    if(rstate.rowLabels && rstate.rowLabels[r]!=null){
+      var lbl = document.createElement('div'); lbl.className='row-label'; lbl.textContent = rstate.rowLabels[r];
+      // 16비트 학습하기의 5줄 전체보기 화면에서만 번호를 눌러 그 리듬 하나만 연습할 수 있게 한다.
+      if(rstate.practice && rstate.catKey==='sixteen' && rstate.rows===5){
+        lbl.classList.add('row-label-clickable');
+        lbl.title = '이 리듬만 연습하기';
+        (function(rowIdx){
+          lbl.addEventListener('pointerdown', function(e){ e.stopPropagation(); e.preventDefault(); startSixteenPracticeSingle(rowIdx); });
+        })(r);
+      }
+      row.appendChild(lbl);
+    }
     board.appendChild(row);
     rstate.rowEls.push(row);
   }
@@ -996,14 +1275,17 @@ function buildScoreBoard(){
       gn.xPct = 4 + ((gn.time-rowStartTime)/rstate.rowDur)*92;
     });
 
-    /* 실제 음표(쉼표 아닌 것)가 2개 이상 있을 때만 빔으로 묶는다. 쉼표만 있거나 실제 음표가 1개뿐이면
-       그 음표는 빔 없이 혼자 꼬리(flag)를 단다. 빔은 맨 앞/뒤에 쉼표가 있어도 그 쉼표 위로는 절대
-       뻗지 않고, 오직 첫 실제 음표부터 마지막 실제 음표까지만 잇는다. */
+    /* 실제 음표(쉼표 아닌 것)가 2개 이상 '연속으로 붙어' 있을 때만 빔으로 묶는다. 쉼표만 있거나
+       실제 음표가 1개뿐이면 혼자 꼬리(flag)를 단다. 또한 예를 들어 '16분음표-16분쉼표-16분음표-16분쉼표'
+       처럼 실제 음표들 사이에 쉼표가 끼어서 서로 떨어져 있으면(=연속되지 않으면) 아예 빔으로 묶지 않고
+       각 음표가 개별적으로 꼬리를 단다. 빔은 맨 앞/뒤에 쉼표가 있어도 그 쉼표 위로는 절대 뻗지 않고,
+       오직 첫 실제 음표부터 마지막 실제 음표까지만 잇는다. */
     var realIdxs = [];
     groupNotes.forEach(function(gn, idx){ if(!gn.isRest) realIdxs.push(idx); });
-    var needsFlags = realIdxs.length <= 1;
+    var contiguous = realIdxs.length>0 && (realIdxs[realIdxs.length-1]-realIdxs[0] === realIdxs.length-1);
+    var needsFlags = realIdxs.length <= 1 || !contiguous;
 
-    if(realIdxs.length > 1){
+    if(realIdxs.length > 1 && contiguous){
       var rIdx = groupNotes[0].rowIdx;
       var firstReal = realIdxs[0], lastReal = realIdxs[realIdxs.length-1];
       var xs = groupNotes.map(function(gn){ return gn.xPct + STEM_OFFSET_PCT; });
@@ -1050,13 +1332,50 @@ function buildScoreBoard(){
    리듬 길이는 꼬리/빔 + 막대 길이(durBarWidth)로 나타낸다. 색은 정답/오답 판정에만 쓰기 때문에
    (맞으면 초록, 틀리면 빨강) 채점 전 음표는 항상 중립색(NOTE_NEUTRAL)으로 그린다 - durColor는 범례에서만 사용. */
 function durColor(dur){
-  return dur===1 ? 'var(--note-q)' : dur===0.5 ? 'var(--note-e)' : 'var(--note-s)';
+  return dur===1 ? 'var(--note-q)' : (dur===0.5||dur===0.75) ? 'var(--note-e)' : 'var(--note-s)';
 }
 var NOTE_NEUTRAL = 'var(--text)';
 // 리듬 길이를 꼬리 개수뿐 아니라 "막대 길이"로도 눈에 보이게: 길수록 긴 리듬, 짧을수록 짧은 리듬.
 function durBarWidth(dur){
-  return dur===1 ? 26 : dur===0.5 ? 16 : 9;
+  return dur===1 ? 26 : dur===0.75 ? 21 : dur===0.5 ? 16 : 9;
 }
+/* 단계 선택 화면 등에서 쓰는 작은 리듬꼴 미리보기 아이콘 (실제 게임 노트와 별개로 색상 있는 참고용). */
+function miniPatternPreviewSVG(pattern){
+  var spacing = 22, n = pattern.length;
+  var width = 34 + (n-1)*spacing;
+  var parts = [];
+  var xs = pattern.map(function(m,i){ return 22+i*spacing; });
+  if(n>1 && pattern.every(function(m){ return m.d<=0.5; })){
+    parts.push('<line x1="'+xs[0]+'" y1="8" x2="'+xs[n-1]+'" y2="8" stroke="var(--text)" stroke-width="4"/>');
+    for(var k=0;k<n-1;k++){
+      if(pattern[k].d===0.25 && pattern[k+1].d===0.25){
+        parts.push('<line x1="'+xs[k]+'" y1="17" x2="'+xs[k+1]+'" y2="17" stroke="var(--text)" stroke-width="4"/>');
+      }
+    }
+    for(var k2=0;k2<n;k2++){
+      if(pattern[k2].d!==0.25) continue;
+      var leftPair = k2>0 && pattern[k2-1].d===0.25;
+      var rightPair = k2<n-1 && pattern[k2+1].d===0.25;
+      if(!leftPair && !rightPair){
+        var dir = (k2===n-1) ? -1 : 1;
+        parts.push('<line x1="'+xs[k2]+'" y1="17" x2="'+(xs[k2]+dir*10)+'" y2="17" stroke="var(--text)" stroke-width="4"/>');
+      }
+    }
+  }
+  pattern.forEach(function(m,i){
+    var nx=14+i*spacing, sx=xs[i], c=durColor(m.d);
+    parts.push('<line x1="'+sx+'" y1="60" x2="'+sx+'" y2="8" stroke="'+c+'" stroke-width="3.5"/>');
+    parts.push('<ellipse cx="'+nx+'" cy="60" rx="8" ry="6" fill="'+c+'" transform="rotate(-16 '+nx+' 60)"/>');
+  });
+  var dispW = Math.round(width*0.55), dispH = Math.round(70*0.55);
+  return '<svg viewBox="0 0 '+width+' 70" width="'+dispW+'" height="'+dispH+'" style="overflow:visible">'+parts.join('')+'</svg>';
+}
+var SIXTEEN_STAGE_PREVIEW = {
+  1: PATTERN_16TH_ALL4,
+  3: PATTERN_16TH_DIDITA,
+  5: PATTERN_16TH_TADIDI,
+  7: PATTERN_16TH_SYNCO
+};
 var NOTE_BASE_SCALE = 22/44; // 뷰박스 단위 -> 실제 px 배율 (모든 음표에 항상 동일하게 적용 -> 세로 길이가 늘 같음)
 var NOTE_DISP_W = 44*NOTE_BASE_SCALE;  // 음표 하나의 표시 너비(px)
 var NOTE_DISP_H = 92*NOTE_BASE_SCALE;  // 음표 하나의 표시 높이(px)
@@ -1071,33 +1390,53 @@ function singleNoteGlyphSVG(dur, isRest, needsFlags){
   var nx = 18, sx = 29;
   var parts = [];
   if(isRest){
-    // 쉼표: 실제 악보의 8분/16분 쉼표 모양(지그재그 갈고리 + 대각선 꼬리)을 채워진 도형으로 그린다.
-    // 8분쉼표=갈고리 1개, 16분쉼표=갈고리 2개로 서로 구분되게.
-    var restPath;
-    if(dur===0.25){
-      var R2 = nx+10;
-      restPath =
-        'M'+R2+',14 C'+(R2+6)+',16 '+(R2+7)+',22 '+(R2+2)+',24 C'+(R2-2)+',26 '+(R2-1)+',30 '+(R2+3)+',32 L'+(R2-8)+',62 L'+(R2-12)+',60 L'+(R2-2)+',32 C'+(R2-6)+',30 '+(R2-7)+',25 '+(R2-3)+',23 C'+R2+',21.5 '+(R2+1)+',18 '+(R2-4)+',16 Z ' +
-        'M'+(R2-4)+',32 C'+(R2+2)+',34 '+(R2+3)+',40 '+(R2-2)+',42 C'+(R2-6)+',44 '+(R2-5)+',48 '+(R2-1)+',50 L'+(R2-8)+',62 L'+(R2-12)+',60 Z';
+    // 쉼표: 4분/8분/16분쉼표가 서로 뚜렷하게 구분되는, 실제 악보와 닮은 곡선 모양으로 그린다.
+    // (직선/각진 모양은 한글 자음처럼 보인다는 피드백이 있어서 전부 부드러운 곡선으로 다시 그렸다.)
+    if(dur===1){
+      // 4분쉼표: 물결 모양(지그재그) 곡선 - 직선 없이 전부 베지어 곡선.
+      var Q = nx+10;
+      var restPath =
+        'M'+Q+',40 C'+(Q+6)+',43 '+(Q+6)+',49 '+Q+',52 C'+(Q-6)+',55 '+(Q-10)+',58 '+(Q-4)+',62 ' +
+        'C'+(Q+2)+',66 '+Q+',70 '+(Q-8)+',78 C'+(Q-2)+',71 '+(Q-1)+',67 '+(Q-7)+',63 ' +
+        'C'+(Q-13)+',59 '+(Q-11)+',55 '+(Q-5)+',51 C'+(Q+1)+',47 '+(Q+1)+',43 '+(Q-6)+',40 Z';
+      parts.push('<g class="notehead"><path d="'+restPath+'" fill="var(--muted)"/></g>');
+    } else if(dur===0.25){
+      // 16분쉼표: 둥근 머리(고리) 2개 + 곡선 꼬리 2단.
+      var R3 = nx+12;
+      var restPath =
+        'M'+R3+',20 C'+(R3+3)+',23 '+(R3+2)+',28 '+(R3-3)+',29 C'+(R3-8)+',30 '+(R3-9)+',26 '+(R3-6)+',23 C'+(R3-4)+',21 '+(R3-2)+',19 '+R3+',20 Z ' +
+        'M'+(R3-3)+',28 C'+(R3-5)+',31 '+(R3-7)+',36 '+(R3-9)+',40 ' +
+        'M'+(R3-5)+',36 C'+(R3-2)+',39 '+(R3-3)+',44 '+(R3-8)+',45 C'+(R3-13)+',46 '+(R3-14)+',42 '+(R3-11)+',39 C'+(R3-9)+',37 '+(R3-7)+',35 '+(R3-5)+',36 Z';
+      parts.push('<g class="notehead">' +
+        '<path d="'+restPath+'" fill="var(--muted)"/>' +
+        '<path d="M'+(R3-8)+',44 C'+(R3-11)+',50 '+(R3-14)+',62 '+(R3-18)+',74" stroke="var(--muted)" stroke-width="3" stroke-linecap="round" fill="none"/>' +
+      '</g>');
     } else {
-      var R1 = nx+8;
-      restPath =
-        'M'+R1+',24 C'+(R1+6)+',26 '+(R1+7)+',32 '+(R1+2)+',34 C'+(R1-2)+',36 '+(R1-1)+',40 '+(R1+3)+',42 L'+(R1-8)+',72 L'+(R1-12)+',70 L'+(R1-2)+',42 C'+(R1-6)+',40 '+(R1-7)+',35 '+(R1-3)+',33 C'+R1+',31.5 '+(R1+1)+',28 '+(R1-4)+',26 Z';
+      // 8분쉼표: 둥근 머리(고리) 1개 + 곡선 꼬리.
+      var R2 = nx+12;
+      var headPath =
+        'M'+R2+',32 C'+(R2+3)+',35 '+(R2+2)+',40 '+(R2-3)+',41 C'+(R2-8)+',42 '+(R2-9)+',38 '+(R2-6)+',35 C'+(R2-4)+',33 '+(R2-2)+',31 '+R2+',32 Z';
+      parts.push('<g class="notehead">' +
+        '<path d="'+headPath+'" fill="var(--muted)"/>' +
+        '<path d="M'+(R2-3)+',40 C'+(R2-6)+',44 '+(R2-10)+',58 '+(R2-15)+',72" stroke="var(--muted)" stroke-width="3" stroke-linecap="round" fill="none"/>' +
+      '</g>');
     }
-    parts.push('<g class="notehead"><path d="'+restPath+'" fill="var(--muted)"/></g>');
   } else {
     var color = NOTE_NEUTRAL;
     var flags = '';
     if(needsFlags){
-      if(dur===0.5){ flags = '<path d="M'+sx+',10 C'+(sx+12)+',14 '+(sx+11)+',27 '+(sx+1)+',33" fill="none" stroke="'+color+'" stroke-width="4.5" stroke-linecap="round"/>'; }
+      if(dur===0.5 || dur===0.75){ flags = '<path d="M'+sx+',10 C'+(sx+12)+',14 '+(sx+11)+',27 '+(sx+1)+',33" fill="none" stroke="'+color+'" stroke-width="4.5" stroke-linecap="round"/>'; }
       else if(dur===0.25){ flags = '<path d="M'+sx+',10 C'+(sx+12)+',14 '+(sx+11)+',27 '+(sx+1)+',33" fill="none" stroke="'+color+'" stroke-width="4.5" stroke-linecap="round"/>' +
         '<path d="M'+sx+',21 C'+(sx+12)+',25 '+(sx+11)+',38 '+(sx+1)+',44" fill="none" stroke="'+color+'" stroke-width="4.5" stroke-linecap="round"/>'; }
     }
+    // 점(dot): 점8분음표(dur=0.75)일 때만 음표머리 오른쪽에 작은 점을 찍는다.
+    var dot = dur===0.75 ? '<circle cx="'+(nx+15)+'" cy="78" r="2.2" fill="'+color+'"/>' : '';
     var barW = durBarWidth(dur);
     parts.push('<g class="notehead">' +
       '<line x1="'+sx+'" y1="76" x2="'+sx+'" y2="10" stroke="'+color+'" stroke-width="4.5" stroke-linecap="round"/>' +
       flags +
       '<ellipse cx="'+nx+'" cy="76" rx="11" ry="8.2" fill="'+color+'" transform="rotate(-16 '+nx+' 76)"/>' +
+      dot +
       '<rect x="'+(nx-barW/2)+'" y="87" width="'+barW+'" height="4" rx="2" fill="'+color+'"/>' +
     '</g>');
   }
@@ -1121,10 +1460,17 @@ function buildLevelGrid(catKey){
   practiceCard.innerHTML = '<div class="lv-num">학습하기</div><div class="lv-bpm">같은 4마디 반복 연습 · 60 BPM</div>';
   practiceCard.onclick = function(){ startRPractice(catKey); };
   el.appendChild(practiceCard);
-  for(var s=1; s<=10; s++){
+  var totalStages = stagesForCat(catKey);
+  for(var s=1; s<=totalStages; s++){
     var bpm = catKey==='sixteen' ? sixteenStageBpm(s) : stageBpm(s);
     var card = document.createElement('div'); card.className='level-card';
     card.innerHTML = '<div class="lv-num">'+s+'</div><div class="lv-bpm">'+bpm+' BPM</div>';
+    if(catKey==='sixteen' && SIXTEEN_STAGE_PREVIEW[s]){
+      var previewWrap = document.createElement('div');
+      previewWrap.style.marginTop = '4px';
+      previewWrap.innerHTML = miniPatternPreviewSVG(SIXTEEN_STAGE_PREVIEW[s]);
+      card.appendChild(previewWrap);
+    }
     card.onclick = (function(stageNum){ return function(){ startRLevel(catKey, stageNum); }; })(s);
     el.appendChild(card);
   }
@@ -1146,7 +1492,7 @@ function buildNoteLegend(){
     wrap.appendChild(glyph); wrap.appendChild(lab);
     el.appendChild(wrap);
   });
-  [ {d:0.5, label:'8분쉼표'}, {d:0.25, label:'16분쉼표'} ].forEach(function(r){
+  [ {d:1, label:'4분쉼표'}, {d:0.5, label:'8분쉼표'}, {d:0.25, label:'16분쉼표'} ].forEach(function(r){
     var restWrap = document.createElement('span'); restWrap.style.display='inline-flex'; restWrap.style.alignItems='center'; restWrap.style.gap='4px';
     var restGlyph = document.createElement('span'); restGlyph.style.display='inline-block'; restGlyph.style.width='18px'; restGlyph.style.height='38px';
     var g = singleNoteGlyphSVG(r.d, true, false);
@@ -1163,18 +1509,47 @@ function buildPracticeBars(catKey){
   var bar = stageDef.phrases[0][0];
   return [bar, bar, bar, bar];
 }
+/* 16비트 학습하기 전용: 5가지 표준 리듬꼴을 각각 4마디씩(한 줄) 계속 반복하는 5줄(총 20마디)을 만든다.
+   1=16분음표4개, 2=16분+16분+8분, 3=8분+16분+16분, 4=16분+8분+16분(당김), 5=점8분+16분. */
+var SIXTEEN_PRACTICE_PATTERNS = [PATTERN_16TH_ALL4, PATTERN_16TH_DIDITA, PATTERN_16TH_TADIDI, PATTERN_16TH_SYNCO, SIXTEEN_SYNC_BLOCKS[0]];
+function buildSixteenPracticeBars(){
+  var bars = [];
+  SIXTEEN_PRACTICE_PATTERNS.forEach(function(pat){
+    var bar = [pat,pat,pat,pat];
+    for(var i=0;i<4;i++){ bars.push(bar); }
+  });
+  return bars;
+}
+/* 번호(1~5)를 눌렀을 때 그 리듬 하나만 4마디 반복 연습할 수 있게 1줄짜리 마디 목록을 만든다. */
+function buildSixteenSinglePatternBars(idx){
+  var pat = SIXTEEN_PRACTICE_PATTERNS[idx];
+  var bar = [pat,pat,pat,pat];
+  return [bar,bar,bar,bar];
+}
 
 function startRLevel(catKey, stage){ startRSession(catKey, stage, false); }
 function startRPractice(catKey){ startRSession(catKey, 1, true); }
+function startSixteenPracticeSingle(idx){ startRSession('sixteen', 1, true, idx); }
 
-function startRSession(catKey, stage, isPractice){
+function startRSession(catKey, stage, isPractice, focusIdx){
   ensureAudio();
   rstate.catKey = catKey; rstate.stage = stage; rstate.practice = !!isPractice;
+  rstate.rowLabels = null;
   var bpm, bars;
   if(isPractice){
     bpm = 60;
-    bars = buildPracticeBars(catKey);
-    rstate.rows = 1; rstate.barsPerRow = 4;
+    if(catKey==='sixteen' && focusIdx!=null){
+      bars = buildSixteenSinglePatternBars(focusIdx);
+      rstate.rows = 1; rstate.barsPerRow = 4;
+      rstate.rowLabels = [String(focusIdx+1)];
+    } else if(catKey==='sixteen'){
+      bars = buildSixteenPracticeBars();
+      rstate.rows = 5; rstate.barsPerRow = 4;
+      rstate.rowLabels = ['1','2','3','4','5'];
+    } else {
+      bars = buildPracticeBars(catKey);
+      rstate.rows = 1; rstate.barsPerRow = 4;
+    }
   } else {
     var stageDef = buildStagePhrases(catKey, stage);
     bpm = stageDef.bpm;
@@ -1192,7 +1567,8 @@ function startRSession(catKey, stage, isPractice){
 
   buildScoreBoard(); // 마디 전체를 화면에 한 번에 그린다 (스크롤 애니메이션 없음)
 
-  $('rLvNum').textContent = isPractice ? (CATS[catKey].label+' · 학습하기 (반복 연습)') : (CATS[catKey].label+' · '+stage+' / 10');
+  $('rLvNum').textContent = isPractice ? (CATS[catKey].label+' · 학습하기 (반복 연습)') : (CATS[catKey].label+' · '+stage+' / '+stagesForCat(catKey));
+  $('rStageBadge').textContent = isPractice ? '학습하기' : (stage+'단계');
   $('rScoreNum').textContent='0'; $('rComboNum').textContent='\u00A0';
   $('rProgressFill').style.width='0%';
   buildNoteLegend();
@@ -1357,10 +1733,13 @@ function finishRLevel(){
   $('rStars').textContent = '★★★'.slice(0,starN)+'☆☆☆'.slice(0,3-starN);
   $('rStatPerfect').textContent=c.perfect; $('rStatGood').textContent=c.good; $('rStatMiss').textContent=c.miss;
   $('rStatAcc').textContent = acc+'%';
-  var isLast = rstate.stage >= 10;
+  var isLast = rstate.stage >= stagesForCat(rstate.catKey);
   $('rNextBtn').textContent = isLast ? '처음부터' : '다음 단계';
   $('rNextBtn').onclick = function(){ startRLevel(rstate.catKey, isLast?1:rstate.stage+1); };
   $('rRetryBtn').onclick = function(){ startRLevel(rstate.catKey, rstate.stage); };
+
+  saveGameScore('rhythm', { score: rstate.score, detail: CATS[rstate.catKey].label + ' ' + rstate.stage + '단계 (' + acc + '%)' });
+
   showScreen('rResult');
 }
 
@@ -1373,10 +1752,469 @@ window.addEventListener('keydown', function(e){
 });
 
 /* ---------------- 초기화 & 이벤트 바인딩 ---------------- */
+/* =======================================================
+   Firebase 연동 & 회원가입 / 로그인 / 랭킹 관리
+   ======================================================= */
+var firebaseApp = null;
+var auth = null;
+var db = null;
+var currentUser = null; // { uid, name, email, score }
+
+function initFirebase() {
+  var defaultDbUrl = "https://drum-game-4755e-default-rtdb.asia-southeast1.firebasedatabase.app/";
+  var savedApiKey = localStorage.getItem('drum_fb_apikey') || "";
+  var savedDbUrl = localStorage.getItem('drum_fb_dburl') || defaultDbUrl;
+
+  var cfg = {
+    apiKey: savedApiKey || "AIzaSy_DRUM_GAME_DEFAULT_KEY",
+    authDomain: "drum-game-4755e.firebaseapp.com",
+    databaseURL: savedDbUrl,
+    projectId: "drum-game-4755e",
+    storageBucket: "drum-game-4755e.appspot.com"
+  };
+
+  try {
+    if (typeof firebase !== 'undefined') {
+      if (!firebase.apps.length) {
+        firebaseApp = firebase.initializeApp(cfg);
+      } else {
+        firebaseApp = firebase.app();
+      }
+      auth = firebase.auth();
+      db = firebase.database();
+      
+      auth.onAuthStateChanged(function(user) {
+        if (user) {
+          fetchUserProfile(user.uid, user.email, user.displayName);
+        } else {
+          var localUid = localStorage.getItem('drum_current_uid');
+          if (localUid && db) {
+            fetchUserProfile(localUid, localStorage.getItem('drum_current_email'), '');
+          } else {
+            setGuestUser();
+          }
+        }
+      });
+    } else {
+      setGuestUser();
+    }
+  } catch (err) {
+    console.warn("Firebase Init Error:", err);
+    setGuestUser();
+  }
+}
+
+function setGuestUser() {
+  currentUser = null;
+  localStorage.removeItem('drum_current_uid');
+  localStorage.removeItem('drum_current_email');
+  $('userDisplayName').textContent = '👤 게스트 (랭킹 미등록)';
+  $('userScoreBadge').textContent = '자유 플레이';
+  $('openAuthBtn').classList.remove('hidden');
+  $('logoutBtn').classList.add('hidden');
+  $('openAdminBtn').classList.add('hidden');
+}
+
+function fetchUserProfile(uid, email, defaultName) {
+  // 관리자 계정 특별 처리
+  if (uid === 'admin_juteacher' || (email && (email === 'juteacher@drum.school' || email === 'juteacher'))) {
+    currentUser = { uid: 'admin_juteacher', name: '선생님 (관리자)', studentId: 'juteacher', school: '관리자', email: 'juteacher@drum.school', isAdmin: true, score: 0 };
+    $('userDisplayName').textContent = '👑 관리자 (juteacher)';
+    $('userScoreBadge').textContent = '관리자 모드';
+    $('openAuthBtn').classList.add('hidden');
+    $('logoutBtn').classList.remove('hidden');
+    $('openAdminBtn').classList.remove('hidden');
+    return;
+  }
+
+  if (!db) {
+    currentUser = { uid: uid, name: defaultName || (email ? email.split('@')[0] : '학생'), email: email, score: 0 };
+    $('userDisplayName').textContent = '👤 ' + currentUser.name;
+    $('userScoreBadge').textContent = '총점: 0점';
+    $('openAuthBtn').classList.add('hidden');
+    $('logoutBtn').classList.remove('hidden');
+    $('openAdminBtn').classList.add('hidden');
+    return;
+  }
+
+  db.ref('users/' + uid).once('value').then(function(snapshot) {
+    var val = snapshot.val() || {};
+    var name = val.name || defaultName || (email ? email.split('@')[0] : '학생');
+    var score = val.totalScore || 0;
+    var isAdmin = val.isAdmin || (val.studentId === 'juteacher') || (val.email && val.email.includes('juteacher'));
+    
+    currentUser = {
+      uid: uid,
+      name: name,
+      studentId: val.studentId || '',
+      school: val.school || '',
+      email: email,
+      score: score,
+      isAdmin: isAdmin,
+      quizScore: val.quizScore || 0,
+      rhythmScore: val.rhythmScore || 0
+    };
+
+    localStorage.setItem('drum_current_uid', uid);
+    if(email) localStorage.setItem('drum_current_email', email);
+    
+    if (isAdmin) {
+      $('userDisplayName').textContent = '👑 관리자 (' + (val.studentId || 'juteacher') + ')';
+      $('userScoreBadge').textContent = '관리자 모드';
+      $('openAdminBtn').classList.remove('hidden');
+    } else {
+      $('userDisplayName').textContent = '👤 ' + name + (val.school ? (' (' + val.school + ')') : '');
+      $('userScoreBadge').textContent = '총점: ' + score + '점';
+      $('openAdminBtn').classList.add('hidden');
+    }
+    
+    $('openAuthBtn').classList.add('hidden');
+    $('logoutBtn').classList.remove('hidden');
+  }).catch(function(err) {
+    console.error("Profile fetch error:", err);
+    var name = defaultName || (email ? email.split('@')[0] : '학생');
+    currentUser = { uid: uid, name: name, email: email, score: 0 };
+    $('userDisplayName').textContent = '👤 ' + name;
+    $('userScoreBadge').textContent = '총점: 0점';
+    $('openAuthBtn').classList.add('hidden');
+    $('logoutBtn').classList.remove('hidden');
+    $('openAdminBtn').classList.add('hidden');
+  });
+}
+
+function handleSignup(name, studentId, school, password) {
+  var rawId = studentId.trim();
+  var email = rawId.includes('@') ? rawId : (rawId + '@drum.school');
+  showAuthMsg('회원가입 처리 중...', false);
+
+  if (rawId === 'juteacher') {
+    showAuthMsg('juteacher는 관리자 아이디입니다. 로그인해 주세요.', false);
+    return;
+  }
+
+  if (auth && auth.apiKey && auth.apiKey !== "AIzaSy_DRUM_GAME_DEFAULT_KEY") {
+    auth.createUserWithEmailAndPassword(email, password).then(function(res) {
+      var user = res.user;
+      return user.updateProfile({ displayName: name }).then(function() {
+        return db.ref('users/' + user.uid).set({
+          name: name,
+          studentId: rawId,
+          school: school,
+          email: email,
+          createdAt: Date.now(),
+          totalScore: 0,
+          isAdmin: false
+        });
+      });
+    }).then(function() {
+      showAuthMsg('회원가입이 완료되었습니다!', true);
+      setTimeout(closeAuthModal, 1000);
+    }).catch(function(err) {
+      fallbackDbSignup(name, rawId, school, email, password, err);
+    });
+  } else {
+    fallbackDbSignup(name, rawId, school, email, password, null);
+  }
+}
+
+function fallbackDbSignup(name, rawId, school, email, password, authErr) {
+  if (!db) {
+    showAuthMsg('데이터베이스 연결 실패. API Key를 설정해 주세요.', false);
+    return;
+  }
+  var safeId = btoa(unescape(encodeURIComponent(rawId))).replace(/[/+=]/g, '_');
+  db.ref('users/' + safeId).once('value').then(function(snapshot) {
+    if (snapshot.exists()) {
+      showAuthMsg('이미 가입된 아이디/학번입니다.', false);
+    } else {
+      var userData = {
+        name: name,
+        studentId: rawId,
+        school: school,
+        email: email,
+        passwordHash: password,
+        createdAt: Date.now(),
+        totalScore: 0,
+        isAdmin: false
+      };
+      db.ref('users/' + safeId).set(userData).then(function() {
+        showAuthMsg('회원가입 완료! 로그인 중...', true);
+        fetchUserProfile(safeId, email, name);
+        setTimeout(closeAuthModal, 1000);
+      });
+    }
+  }).catch(function(err) {
+    showAuthMsg('가입 오류: ' + (authErr ? authErr.message : err.message), false);
+  });
+}
+
+function handleLogin(emailOrId, password) {
+  var rawId = emailOrId.trim();
+  var email = rawId.includes('@') ? rawId : (rawId + '@drum.school');
+  showAuthMsg('로그인 확인 중...', false);
+
+  // 👑 관리자 계정 직접 확인
+  if ((rawId === 'juteacher' || email === 'juteacher@drum.school') && password === 'gkstjstod') {
+    showAuthMsg('관리자로 로그인 성공!', true);
+    fetchUserProfile('admin_juteacher', 'juteacher@drum.school', '선생님 (관리자)');
+    setTimeout(closeAuthModal, 800);
+    return;
+  }
+
+  if (auth && auth.apiKey && auth.apiKey !== "AIzaSy_DRUM_GAME_DEFAULT_KEY") {
+    auth.signInWithEmailAndPassword(email, password).then(function(res) {
+      showAuthMsg('로그인 성공!', true);
+      setTimeout(closeAuthModal, 800);
+    }).catch(function(err) {
+      fallbackDbLogin(rawId, email, password, err);
+    });
+  } else {
+    fallbackDbLogin(rawId, email, password, null);
+  }
+}
+
+function fallbackDbLogin(rawId, email, password, authErr) {
+  if (!db) {
+    showAuthMsg('로그인 실패. 이메일/비밀번호 또는 API Key를 확인해 주세요.', false);
+    return;
+  }
+  var safeId = btoa(unescape(encodeURIComponent(rawId))).replace(/[/+=]/g, '_');
+  db.ref('users/' + safeId).once('value').then(function(snapshot) {
+    var val = snapshot.val();
+    if (val && (val.passwordHash === password || !val.passwordHash)) {
+      showAuthMsg('로그인 성공!', true);
+      fetchUserProfile(safeId, email, val.name);
+      setTimeout(closeAuthModal, 800);
+    } else {
+      showAuthMsg('아이디(학번) 또는 비밀번호가 올바르지 않습니다.', false);
+    }
+  }).catch(function(err) {
+    showAuthMsg('로그인 오류: ' + (authErr ? authErr.message : err.message), false);
+  });
+}
+
+function handleLogout() {
+  if (auth && auth.currentUser) {
+    auth.signOut();
+  }
+  setGuestUser();
+}
+
+function showAuthMsg(msg, isSuccess) {
+  var el = $('authMsg');
+  el.textContent = msg;
+  el.className = 'auth-msg ' + (isSuccess ? 'success' : 'error');
+}
+
+function closeAuthModal() {
+  $('authModal').classList.remove('show');
+  $('authMsg').className = 'auth-msg';
+}
+
+function switchAuthTab(tab) {
+  if (tab === 'login') {
+    $('tabLogin').classList.add('active'); $('tabSignup').classList.remove('active');
+    $('loginForm').classList.remove('hidden'); $('signupForm').classList.add('hidden');
+  } else {
+    $('tabSignup').classList.add('active'); $('tabLogin').classList.remove('active');
+    $('signupForm').classList.remove('hidden'); $('loginForm').classList.add('hidden');
+  }
+  $('authMsg').className = 'auth-msg';
+}
+
+function saveGameScore(gameType, scoreDetail) {
+  // 게스트(비로그인)이거나 관리자(isAdmin)이면 랭킹 및 데이터베이스에 저장하지 않음!
+  if (!currentUser || !currentUser.uid || !db || currentUser.isAdmin) return;
+  
+  var nowStr = new Date().toLocaleDateString('ko-KR', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
+  var record = {
+    uid: currentUser.uid,
+    name: currentUser.name + (currentUser.school ? (' (' + currentUser.school + ')') : ''),
+    score: scoreDetail.score,
+    detail: scoreDetail.detail || '',
+    date: nowStr,
+    timestamp: Date.now()
+  };
+
+  db.ref('users/' + currentUser.uid + '/' + gameType).once('value').then(function(snap) {
+    var prev = snap.val() || {};
+    if (!prev.score || scoreDetail.score > prev.score) {
+      db.ref('users/' + currentUser.uid + '/' + gameType).set(record);
+    }
+  });
+
+  db.ref('users/' + currentUser.uid).once('value').then(function(snap) {
+    var val = snap.val() || {};
+    var quizS = (gameType==='quiz' ? scoreDetail.score : (val.quizScore || 0));
+    var rhythmS = (gameType==='rhythm' ? scoreDetail.score : (val.rhythmScore || 0));
+    var total = quizS + rhythmS;
+    
+    db.ref('users/' + currentUser.uid).update({
+      totalScore: total,
+      quizScore: quizS,
+      rhythmScore: rhythmS
+    });
+    currentUser.score = total;
+    $('userScoreBadge').textContent = '총점: ' + total + '점';
+  });
+
+  db.ref('leaderboards/' + gameType + '/' + currentUser.uid).once('value').then(function(snap) {
+    var prev = snap.val() || {};
+    if (!prev.score || scoreDetail.score > prev.score) {
+      db.ref('leaderboards/' + gameType + '/' + currentUser.uid).set(record);
+    }
+  });
+}
+
+function loadLeaderboard(gameType) {
+  var tbody = $('rankTableBody');
+  tbody.innerHTML = '<tr><td colspan="4" style="color:var(--muted); padding:20px;">랭킹 불러오는 중...</td></tr>';
+  
+  if (!db) {
+    tbody.innerHTML = '<tr><td colspan="4" style="color:var(--coral); padding:20px;">파이어베이스 데이터베이스 연결 필요</td></tr>';
+    return;
+  }
+
+  db.ref('leaderboards/' + gameType).orderByChild('score').limitToLast(20).once('value').then(function(snapshot) {
+    var list = [];
+    snapshot.forEach(function(child) {
+      list.push(child.val());
+    });
+    list.reverse();
+
+    if (list.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" style="color:var(--muted); padding:20px;">아직 등록된 랭킹 기록이 없습니다.<br>첫 번째 주인공이 되어보세요!</td></tr>';
+      return;
+    }
+
+    var html = '';
+    list.forEach(function(item, idx) {
+      var rankNum = idx + 1;
+      var rankBadgeClass = rankNum <= 3 ? ('rank-' + rankNum) : '';
+      html += '<tr>' +
+        '<td><span class="rank-badge ' + rankBadgeClass + '">' + rankNum + '</span></td>' +
+        '<td><b>' + (item.name || '학생') + '</b></td>' +
+        '<td><span style="color:var(--lime); font-weight:bold;">' + item.score + '점</span> ' + (item.detail ? '<small style="color:var(--muted); font-size:11px;">(' + item.detail + ')</small>' : '') + '</td>' +
+        '<td style="color:var(--muted); font-size:12px;">' + (item.date || '') + '</td>' +
+      '</tr>';
+    });
+    tbody.innerHTML = html;
+  }).catch(function(err) {
+    console.error("Leaderboard load error:", err);
+    tbody.innerHTML = '<tr><td colspan="4" style="color:var(--coral); padding:20px;">랭킹 로드 오류 발생</td></tr>';
+  });
+}
+
+/* 관리자 회원 관리 기능 */
+function loadAdminUserList() {
+  var tbody = $('adminUserTableBody');
+  tbody.innerHTML = '<tr><td colspan="7" style="color:var(--muted); padding:20px;">회원 목록 불러오는 중...</td></tr>';
+  
+  if (!db) {
+    tbody.innerHTML = '<tr><td colspan="7" style="color:var(--coral); padding:20px;">파이어베이스 데이터베이스 연결 필요</td></tr>';
+    return;
+  }
+
+  db.ref('users').once('value').then(function(snapshot) {
+    var users = [];
+    snapshot.forEach(function(child) {
+      var u = child.val();
+      u.uid = child.key;
+      users.push(u);
+    });
+
+    if (users.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="color:var(--muted); padding:20px;">가입된 회원이 없습니다.</td></tr>';
+      return;
+    }
+
+    var html = '';
+    users.forEach(function(u, idx) {
+      var dateStr = u.createdAt ? new Date(u.createdAt).toLocaleDateString('ko-KR') : '-';
+      html += '<tr>' +
+        '<td>' + (idx + 1) + '</td>' +
+        '<td><b>' + (u.name || '-') + '</b></td>' +
+        '<td><code>' + (u.studentId || u.uid) + '</code></td>' +
+        '<td>' + (u.school || '-') + '</td>' +
+        '<td><span style="color:var(--lime); font-weight:bold;">' + (u.totalScore || 0) + '점</span></td>' +
+        '<td style="color:var(--muted); font-size:12px;">' + dateStr + '</td>' +
+        '<td>' +
+          '<button type="button" class="btn secondary small" style="padding:4px 8px; font-size:11px; margin-right:4px;" onclick="openEditUserModal(\'' + u.uid + '\')">✏️ 수정</button>' +
+          '<button type="button" class="btn secondary small" style="padding:4px 8px; font-size:11px; border-color:var(--coral); color:var(--coral);" onclick="deleteUserAccount(\'' + u.uid + '\', \'' + (u.name || '') + '\')">🗑️ 삭제</button>' +
+        '</td>' +
+      '</tr>';
+    });
+    tbody.innerHTML = html;
+  }).catch(function(err) {
+    console.error("Admin user list error:", err);
+    tbody.innerHTML = '<tr><td colspan="7" style="color:var(--coral); padding:20px;">회원 로드 오류 발생</td></tr>';
+  });
+}
+
+window.openEditUserModal = function(uid) {
+  if (!db) return;
+  db.ref('users/' + uid).once('value').then(function(snapshot) {
+    var u = snapshot.val();
+    if (!u) return;
+    $('editUid').value = uid;
+    $('editName').value = u.name || '';
+    $('editStudentId').value = u.studentId || '';
+    $('editSchool').value = u.school || '';
+    $('editPassword').value = '';
+    $('editUserModal').classList.add('show');
+  });
+};
+
+window.deleteUserAccount = function(uid, name) {
+  if (!confirm((name ? name + ' ' : '') + '회원 계정을 삭제하시겠습니까?')) return;
+  if (!db) return;
+  
+  db.ref('users/' + uid).remove().then(function() {
+    db.ref('leaderboards/quiz/' + uid).remove();
+    db.ref('leaderboards/rhythm/' + uid).remove();
+    alert('계정이 삭제되었습니다.');
+    loadAdminUserList();
+  }).catch(function(err) {
+    alert('삭제 오류: ' + err.message);
+  });
+};
+
+function saveUserEdit() {
+  var uid = $('editUid').value;
+  var name = $('editName').value.trim();
+  var studentId = $('editStudentId').value.trim();
+  var school = $('editSchool').value.trim();
+  var newPassword = $('editPassword').value.trim();
+
+  if (!uid || !name || !studentId) {
+    alert('이름과 아이디(학번)를 입력해 주세요.');
+    return;
+  }
+
+  var updates = {
+    name: name,
+    studentId: studentId,
+    school: school
+  };
+  if (newPassword) {
+    updates.passwordHash = newPassword;
+  }
+
+  db.ref('users/' + uid).update(updates).then(function() {
+    db.ref('leaderboards/quiz/' + uid).update({ name: name + (school ? (' (' + school + ')') : '') });
+    db.ref('leaderboards/rhythm/' + uid).update({ name: name + (school ? (' (' + school + ')') : '') });
+    
+    alert('회원 정보가 수정되었습니다.');
+    $('editUserModal').classList.remove('show');
+    loadAdminUserList();
+  }).catch(function(err) {
+    alert('수정 오류: ' + err.message);
+  });
+}
+
 function init(){
   rScoreBoard = $('rScoreBoard'); rJudgePop = $('rJudgePop');
 
-  // 터치 기기(모바일/태블릿) 감지 -> body에 클래스 부여해서 CSS로 컨트롤 힌트를 분기
   var isTouch = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || ('ontouchstart' in window);
   if(isTouch){ document.body.classList.add('touch'); }
 
@@ -1407,11 +2245,37 @@ function init(){
 
   $('rLevelSelectBtn').onclick = function(){ buildLevelGrid(rstate.catKey); showScreen('rStageSelect'); };
 
-  // 화면(악보 영역) 전체를 클릭/터치하면 입력되도록 처리
   $('rStageWrap').addEventListener('pointerdown', function(e){ e.preventDefault(); handleRTap(); });
-  // 모바일 전용 스페이스 버튼 (악보 영역과 별개 요소라 중복 입력 걱정 없음)
   $('rSpaceBtn').addEventListener('pointerdown', function(e){ e.preventDefault(); handleRTap(); });
 
+  // 파이어베이스 및 인증/랭킹/관리자 이벤트 바인딩
+  $('openAuthBtn').onclick = function(){ $('authModal').classList.add('show'); };
+  $('closeAuthModal').onclick = closeAuthModal;
+  $('tabLogin').onclick = function(){ switchAuthTab('login'); };
+  $('tabSignup').onclick = function(){ switchAuthTab('signup'); };
+  $('loginForm').onsubmit = function(e){ e.preventDefault(); handleLogin($('loginEmail').value, $('loginPassword').value); };
+  $('signupForm').onsubmit = function(e){ e.preventDefault(); handleSignup($('signupName').value, $('signupId').value, $('signupSchool').value, $('signupPassword').value); };
+  $('logoutBtn').onclick = handleLogout;
+  $('openRankBtn').onclick = function(){ loadLeaderboard('quiz'); $('rankingModal').classList.add('show'); };
+  $('closeRankModal').onclick = function(){ $('rankingModal').classList.remove('show'); };
+  $('rankTabQuiz').onclick = function(){ $('rankTabQuiz').classList.add('active'); $('rankTabRhythm').classList.remove('active'); loadLeaderboard('quiz'); };
+  $('rankTabRhythm').onclick = function(){ $('rankTabRhythm').classList.add('active'); $('rankTabQuiz').classList.remove('active'); loadLeaderboard('rhythm'); };
+  $('openConfigBtn').onclick = function(){ $('cfgApiKey').value = localStorage.getItem('drum_fb_apikey')||''; $('configModal').classList.add('show'); };
+  $('closeConfigModal').onclick = function(){ $('configModal').classList.remove('show'); };
+  $('saveConfigBtn').onclick = function(){
+    if($('cfgApiKey').value.trim()) localStorage.setItem('drum_fb_apikey', $('cfgApiKey').value.trim());
+    if($('cfgDbUrl').value.trim()) localStorage.setItem('drum_fb_dburl', $('cfgDbUrl').value.trim());
+    alert('설정이 저장되었습니다. 페이지를 새로고침합니다.');
+    location.reload();
+  };
+
+  // 관리자 모달 이벤트 바인딩
+  $('openAdminBtn').onclick = function(){ loadAdminUserList(); $('adminModal').classList.add('show'); };
+  $('closeAdminModal').onclick = function(){ $('adminModal').classList.remove('show'); };
+  $('closeEditUserModal').onclick = function(){ $('editUserModal').classList.remove('show'); };
+  $('saveUserEditBtn').onclick = saveUserEdit;
+
+  initFirebase();
   showScreen('menuScreen');
 }
 init();
