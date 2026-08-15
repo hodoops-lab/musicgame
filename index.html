@@ -491,17 +491,13 @@
   <div id="rankingModal" class="modal-overlay">
     <div class="modal-box" style="max-width:560px;">
       <button class="modal-close" id="closeRankModal">&times;</button>
-      <h2 class="stitle" style="text-align:center;">🏆 드럼 마스터 명예의 전당</h2>
-      <div class="auth-tabs" style="justify-content:center; margin-top:12px;">
-        <button class="auth-tab active" id="rankTabQuiz" type="button">악보 매칭 랭킹</button>
-        <button class="auth-tab" id="rankTabRhythm" type="button">리듬 게임 랭킹</button>
-      </div>
-      <div id="rankListContainer" style="max-height:360px; overflow-y:auto;">
+      <h2 class="stitle" style="text-align:center;">🏆 드럼 마스터 랭킹</h2>
+      <div id="rankListContainer" style="max-height:360px; overflow-y:auto; margin-top:16px;">
         <table class="rank-table">
           <thead>
             <tr>
               <th>순위</th>
-              <th>이름 / 학번</th>
+              <th>아이디 (학번)</th>
               <th>점수 / 성적</th>
               <th>날짜</th>
             </tr>
@@ -2139,6 +2135,7 @@ function saveGameScore(gameType, scoreDetail) {
   var nowStr = new Date().toLocaleDateString('ko-KR', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
   var record = {
     uid: currentUser.uid,
+    studentId: currentUser.studentId || '',
     name: currentUser.name + (currentUser.school ? (' (' + currentUser.school + ')') : ''),
     score: scoreDetail.score,
     detail: scoreDetail.detail || '',
@@ -2201,9 +2198,10 @@ function loadLeaderboard(gameType) {
     list.forEach(function(item, idx) {
       var rankNum = idx + 1;
       var rankBadgeClass = rankNum <= 3 ? ('rank-' + rankNum) : '';
+      var displayId = item.studentId || (item.name ? item.name.split(' ')[0].split('(')[0] : '-');
       html += '<tr>' +
         '<td><span class="rank-badge ' + rankBadgeClass + '">' + rankNum + '</span></td>' +
-        '<td><b>' + (item.name || '학생') + '</b></td>' +
+        '<td><b>' + displayId + '</b></td>' +
         '<td><span style="color:var(--lime); font-weight:bold;">' + item.score + '점</span> ' + (item.detail ? '<small style="color:var(--muted); font-size:11px;">(' + item.detail + ')</small>' : '') + '</td>' +
         '<td style="color:var(--muted); font-size:12px;">' + (item.date || '') + '</td>' +
       '</tr>';
@@ -2311,8 +2309,7 @@ function saveUserEdit() {
   }
 
   db.ref('users/' + uid).update(updates).then(function() {
-    db.ref('leaderboards/quiz/' + uid).update({ name: name + (school ? (' (' + school + ')') : '') });
-    db.ref('leaderboards/rhythm/' + uid).update({ name: name + (school ? (' (' + school + ')') : '') });
+    db.ref('leaderboards/rhythm/' + uid).update({ studentId: studentId, name: name + (school ? (' (' + school + ')') : '') });
     
     alert('회원 정보가 수정되었습니다.');
     $('editUserModal').classList.remove('show');
@@ -2374,10 +2371,8 @@ function init(){
   $('loginForm').onsubmit = function(e){ e.preventDefault(); handleLogin($('loginEmail').value, $('loginPassword').value); };
   $('signupForm').onsubmit = function(e){ e.preventDefault(); handleSignup($('signupName').value, $('signupId').value, $('signupSchool').value, $('signupPassword').value); };
   $('logoutBtn').onclick = handleLogout;
-  $('openRankBtn').onclick = function(){ loadLeaderboard('quiz'); $('rankingModal').classList.add('show'); };
+  $('openRankBtn').onclick = function(){ loadLeaderboard('rhythm'); $('rankingModal').classList.add('show'); };
   $('closeRankModal').onclick = function(){ $('rankingModal').classList.remove('show'); };
-  $('rankTabQuiz').onclick = function(){ $('rankTabQuiz').classList.add('active'); $('rankTabRhythm').classList.remove('active'); loadLeaderboard('quiz'); };
-  $('rankTabRhythm').onclick = function(){ $('rankTabRhythm').classList.add('active'); $('rankTabQuiz').classList.remove('active'); loadLeaderboard('rhythm'); };
   $('openConfigBtn').onclick = function(){ $('cfgApiKey').value = localStorage.getItem('drum_fb_apikey')||''; $('configModal').classList.add('show'); };
   $('closeConfigModal').onclick = function(){ $('configModal').classList.remove('show'); };
   $('saveConfigBtn').onclick = function(){
