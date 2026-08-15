@@ -2182,9 +2182,23 @@ function loadLeaderboard(gameType) {
     return;
   }
 
-  db.ref('leaderboards/' + gameType).orderByChild('score').limitToLast(20).once('value').then(function(snapshot) {
+  Promise.all([
+    db.ref('leaderboards/' + gameType).orderByChild('score').limitToLast(20).once('value'),
+    db.ref('users').once('value')
+  ]).then(function(results) {
+    var lbSnap = results[0];
+    var usersSnap = results[1];
+
+    var usersMap = {};
+    if (usersSnap && usersSnap.exists()) {
+      usersSnap.forEach(function(uChild) {
+        var uVal = uChild.val() || {};
+        usersMap[uChild.key] = uVal.studentId || uVal.uid || '';
+      });
+    }
+
     var list = [];
-    snapshot.forEach(function(child) {
+    lbSnap.forEach(function(child) {
       list.push(child.val());
     });
     list.reverse();
@@ -2198,7 +2212,19 @@ function loadLeaderboard(gameType) {
     list.forEach(function(item, idx) {
       var rankNum = idx + 1;
       var rankBadgeClass = rankNum <= 3 ? ('rank-' + rankNum) : '';
-      var displayId = item.studentId || (item.name ? item.name.split(' ')[0].split('(')[0] : '-');
+      
+      // 학번(아이디) 결정: 1) item.studentId 2) users profile의 studentId 3) item.uid (base64 디코딩 시도) 4) item.uid 또는 '-'
+      var displayId = item.studentId || (item.uid ? usersMap[item.uid] : '');
+      if (!displayId && item.uid) {
+        try {
+          var decoded = decodeURIComponent(escape(atob(item.uid.replace(/_/g, '/'))));
+          if (decoded && !decoded.includes('{')) displayId = decoded;
+        } catch(e) {}
+      }
+      if (!displayId) {
+        displayId = item.uid || '-';
+      }
+
       html += '<tr>' +
         '<td><span class="rank-badge ' + rankBadgeClass + '">' + rankNum + '</span></td>' +
         '<td><b>' + displayId + '</b></td>' +
