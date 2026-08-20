@@ -740,8 +740,66 @@ var ALL_SCREENS = ['menuScreen','noteIntro','noteLearn','noteQuiz','noteResult',
 function showScreen(id){
   ALL_SCREENS.forEach(function(s){ $(s).classList.add('hidden'); });
   $(id).classList.remove('hidden');
+  // 메뉴가 아닌 화면으로 들어갈 때마다 뒤로가기 트랩을 걸어서, 모바일 하단 바의 뒤로가기가
+  // 페이지를 벗어나지 않고 이 화면으로 돌아오는 계기(popstate)가 되게 한다.
+  if(id==='menuScreen'){ backNavArmed = false; } else { armBackNav(); }
 }
 function goMenu(){ rStopLoop(); clearQuizTimer(); showScreen('menuScreen'); }
+
+/* ---------------- 뒤로가기(키보드 Backspace / 모바일 하단 바 뒤로가기) ----------------
+   화면마다 이미 있는 "← ..." 뒤로가기 버튼과 똑같은 동작을 백스페이스 키와 모바일 브라우저의
+   시스템/제스처 뒤로가기(popstate)에도 연결한다. 열려있는 모달이 있으면 화면 이동보다 모달 닫기를 먼저 한다. */
+var SCREEN_BACK_ACTION = {
+  noteIntro: goMenu,
+  noteLearn: goMenu,
+  noteQuiz: goMenu,
+  noteResult: goMenu,
+  rCatSelect: goMenu,
+  rStageSelect: function(){ buildCatGrid(); showScreen('rCatSelect'); },
+  rGame: goMenu,
+  rResult: function(){ buildLevelGrid(rstate.catKey); showScreen('rStageSelect'); }
+};
+function currentScreenId(){
+  for(var i=0;i<ALL_SCREENS.length;i++){ if(!$(ALL_SCREENS[i]).classList.contains('hidden')) return ALL_SCREENS[i]; }
+  return null;
+}
+function closeTopModal(){
+  if($('authModal').classList.contains('show')){ closeAuthModal(); return true; }
+  if($('rankingModal').classList.contains('show')){ $('rankingModal').classList.remove('show'); return true; }
+  if($('configModal').classList.contains('show')){ $('configModal').classList.remove('show'); return true; }
+  if($('editUserModal').classList.contains('show')){ $('editUserModal').classList.remove('show'); return true; }
+  if($('adminModal').classList.contains('show')){ $('adminModal').classList.remove('show'); return true; }
+  return false;
+}
+/* 반환값: 이번 뒤로가기로 아직 앱 안(메뉴 화면이 아닌 곳)에 남아있으면 true, 이미 메뉴거나 더 갈 곳이 없으면 false.
+   true일 때만 popstate 트랩을 다시 걸어서, 메뉴 화면까지 온 다음번 뒤로가기는 실제로 브라우저를 벗어나게 둔다. */
+function handleBackNav(){
+  if(closeTopModal()) return true;
+  var cur = currentScreenId();
+  if(cur && cur!=='menuScreen' && SCREEN_BACK_ACTION[cur]){
+    SCREEN_BACK_ACTION[cur]();
+    return currentScreenId()!=='menuScreen';
+  }
+  return false;
+}
+var backNavArmed = false;
+function armBackNav(){
+  if(backNavArmed) return;
+  try{ history.pushState({appNav:true}, '', location.href); backNavArmed = true; }catch(e){}
+}
+window.addEventListener('popstate', function(){
+  backNavArmed = false;
+  if(handleBackNav()) armBackNav();
+});
+document.addEventListener('keydown', function(e){
+  if(e.key !== 'Backspace') return;
+  var ae = document.activeElement;
+  var tag = ae && ae.tagName;
+  var isEditable = tag==='INPUT' || tag==='TEXTAREA' || (ae && ae.isContentEditable);
+  if(isEditable) return; // 입력창에 포커스가 있을 땐 원래 백스페이스(글자 지우기) 동작을 그대로 둔다
+  e.preventDefault();
+  handleBackNav();
+});
 
 /* =======================================================
    드럼 세트 사진 (인트로 학습 화면) - 업로드해주신 실제 사진을 그대로 사용
@@ -2299,6 +2357,7 @@ window.openEditUserModal = function(uid) {
     $('editSchool').value = u.school || '';
     $('editPassword').value = '';
     $('editUserModal').classList.add('show');
+    armBackNav();
   });
 };
 
@@ -2393,16 +2452,16 @@ function init(){
   $('rSpaceBtn').addEventListener('pointerdown', function(e){ e.preventDefault(); handleRTap(); });
 
   // 파이어베이스 및 인증/랭킹/관리자 이벤트 바인딩
-  $('openAuthBtn').onclick = function(){ $('authModal').classList.add('show'); };
+  $('openAuthBtn').onclick = function(){ $('authModal').classList.add('show'); armBackNav(); };
   $('closeAuthModal').onclick = closeAuthModal;
   $('tabLogin').onclick = function(){ switchAuthTab('login'); };
   $('tabSignup').onclick = function(){ switchAuthTab('signup'); };
   $('loginForm').onsubmit = function(e){ e.preventDefault(); handleLogin($('loginEmail').value, $('loginPassword').value); };
   $('signupForm').onsubmit = function(e){ e.preventDefault(); handleSignup($('signupName').value, $('signupId').value, $('signupSchool').value, $('signupPassword').value); };
   $('logoutBtn').onclick = handleLogout;
-  $('openRankBtn').onclick = function(){ loadLeaderboard('rhythm'); $('rankingModal').classList.add('show'); };
+  $('openRankBtn').onclick = function(){ loadLeaderboard('rhythm'); $('rankingModal').classList.add('show'); armBackNav(); };
   $('closeRankModal').onclick = function(){ $('rankingModal').classList.remove('show'); };
-  $('openConfigBtn').onclick = function(){ $('cfgApiKey').value = localStorage.getItem('drum_fb_apikey')||''; $('configModal').classList.add('show'); };
+  $('openConfigBtn').onclick = function(){ $('cfgApiKey').value = localStorage.getItem('drum_fb_apikey')||''; $('configModal').classList.add('show'); armBackNav(); };
   $('closeConfigModal').onclick = function(){ $('configModal').classList.remove('show'); };
   $('saveConfigBtn').onclick = function(){
     if($('cfgApiKey').value.trim()) localStorage.setItem('drum_fb_apikey', $('cfgApiKey').value.trim());
@@ -2412,7 +2471,7 @@ function init(){
   };
 
   // 관리자 모달 이벤트 바인딩
-  $('openAdminBtn').onclick = function(){ loadAdminUserList(); $('adminModal').classList.add('show'); };
+  $('openAdminBtn').onclick = function(){ loadAdminUserList(); $('adminModal').classList.add('show'); armBackNav(); };
   $('closeAdminModal').onclick = function(){ $('adminModal').classList.remove('show'); };
   $('closeEditUserModal').onclick = function(){ $('editUserModal').classList.remove('show'); };
   $('saveUserEditBtn').onclick = saveUserEdit;
