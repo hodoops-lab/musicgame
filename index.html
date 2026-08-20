@@ -2192,45 +2192,40 @@ function switchAuthTab(tab) {
 function saveGameScore(gameType, scoreDetail) {
   // 게스트(비로그인)이거나 관리자(isAdmin)이면 랭킹 및 데이터베이스에 저장하지 않음!
   if (!currentUser || !currentUser.uid || !db || currentUser.isAdmin) return;
-  
+
   var nowStr = new Date().toLocaleDateString('ko-KR', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
-  var record = {
-    uid: currentUser.uid,
-    studentId: currentUser.studentId || '',
-    name: currentUser.name + (currentUser.school ? (' (' + currentUser.school + ')') : ''),
-    score: scoreDetail.score,
-    detail: scoreDetail.detail || '',
-    date: nowStr,
-    timestamp: Date.now()
-  };
 
-  db.ref('users/' + currentUser.uid + '/' + gameType).once('value').then(function(snap) {
-    var prev = snap.val() || {};
-    if (!prev.score || scoreDetail.score > prev.score) {
-      db.ref('users/' + currentUser.uid + '/' + gameType).set(record);
-    }
-  });
-
+  // 한 판의 최고 점수만 남기던 것을, 플레이할 때마다 점수를 계속 누적(합산)하도록 바꿔서
+  // 한 판에서 낼 수 있는 최대치(예: 304점)에서 더 안 오르고 막히지 않고, 플레이한 만큼 계속 올라가게 한다.
   db.ref('users/' + currentUser.uid).once('value').then(function(snap) {
     var val = snap.val() || {};
-    var quizS = (gameType==='quiz' ? scoreDetail.score : (val.quizScore || 0));
-    var rhythmS = (gameType==='rhythm' ? scoreDetail.score : (val.rhythmScore || 0));
-    var total = quizS + rhythmS;
-    
+    var prevQuiz = val.quizScore || 0;
+    var prevRhythm = val.rhythmScore || 0;
+    var newQuiz = gameType==='quiz' ? prevQuiz + scoreDetail.score : prevQuiz;
+    var newRhythm = gameType==='rhythm' ? prevRhythm + scoreDetail.score : prevRhythm;
+    var total = newQuiz + newRhythm;
+    var cumulativeScore = gameType==='quiz' ? newQuiz : newRhythm;
+
+    var record = {
+      uid: currentUser.uid,
+      studentId: currentUser.studentId || '',
+      name: currentUser.name + (currentUser.school ? (' (' + currentUser.school + ')') : ''),
+      score: cumulativeScore,
+      detail: scoreDetail.detail || '',
+      date: nowStr,
+      timestamp: Date.now()
+    };
+
+    db.ref('users/' + currentUser.uid + '/' + gameType).set(record);
     db.ref('users/' + currentUser.uid).update({
       totalScore: total,
-      quizScore: quizS,
-      rhythmScore: rhythmS
+      quizScore: newQuiz,
+      rhythmScore: newRhythm
     });
+    db.ref('leaderboards/' + gameType + '/' + currentUser.uid).set(record);
+
     currentUser.score = total;
     $('userScoreBadge').textContent = '총점: ' + total + '점';
-  });
-
-  db.ref('leaderboards/' + gameType + '/' + currentUser.uid).once('value').then(function(snap) {
-    var prev = snap.val() || {};
-    if (!prev.score || scoreDetail.score > prev.score) {
-      db.ref('leaderboards/' + gameType + '/' + currentUser.uid).set(record);
-    }
   });
 }
 
@@ -2244,7 +2239,7 @@ function loadLeaderboard(gameType) {
   }
 
   Promise.all([
-    db.ref('leaderboards/' + gameType).orderByChild('score').limitToLast(20).once('value'),
+    db.ref('leaderboards/' + gameType).orderByChild('score').once('value'),
     db.ref('users').once('value')
   ]).then(function(results) {
     var lbSnap = results[0];
