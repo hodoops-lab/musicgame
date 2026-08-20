@@ -662,12 +662,15 @@ function styleXNote(el, color){
   b2.style.transform='translate(-50%,-50%) rotate(-45deg)';
   el.appendChild(b1); el.appendChild(b2);
 }
-function makeStaffNote(part, colorOverride){
+/* 악보 매칭 게임(학습하기/퀴즈)의 오선보 음표 색상: 기종에 따라 흐리게 보인다는 피드백이 있어
+   무조건 잘 보이는 형광 초록색으로 고정한다. (리듬 게임 쪽 음표 색상과는 무관 — 그쪽은 건드리지 않음) */
+var STAFF_NOTE_COLOR = '#39ff6a';
+function makeStaffNote(part){
   var p = PARTS[part];
   var el = document.createElement('div');
   el.className = 'staff-note';
   el.style.top = p.y + 'px';
-  var color = colorOverride || p.color;
+  var color = STAFF_NOTE_COLOR;
   if(p.shape==='round'){ el.classList.add('round'); el.style.background = color; }
   else { styleXNote(el, color); }
   if(p.accent){
@@ -878,7 +881,7 @@ function renderQuestion(){
   // 두 모드 모두 오선보 기호를 문제로 보여준다 (위치/모양만, 색상은 정답을 드러내지 않도록 중립색)
   var box = $('quizStaffBox');
   buildStaffLines(box);
-  box.appendChild(makeStaffNote(q.part, 'var(--text)'));
+  box.appendChild(makeStaffNote(q.part));
 
   if(q.type==='nameFromSymbol'){
     $('quizQ').textContent = '이 악보 기호는 어떤 파트를 나타낼까요?';
