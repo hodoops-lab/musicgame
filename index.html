@@ -489,17 +489,23 @@
 
   <!-- ============ 랭킹 / 리더보드 모달 ============ -->
   <div id="rankingModal" class="modal-overlay">
-    <div class="modal-box" style="max-width:560px;">
+    <div class="modal-box" style="max-width:600px;">
       <button class="modal-close" id="closeRankModal">&times;</button>
       <h2 class="stitle" style="text-align:center;">🏆 드럼 마스터 랭킹</h2>
-      <div id="rankListContainer" style="max-height:360px; overflow-y:auto; margin-top:16px;">
+      <p style="font-size:12px; color:var(--muted); text-align:center; margin:4px 0 14px;">참여한 모든 학생의 랭킹 목록입니다.</p>
+      <div class="auth-tabs" style="justify-content:center; margin-bottom:12px;">
+        <button class="auth-tab active" id="rankTabTotal" type="button">🏆 전체 (총점)</button>
+        <button class="auth-tab" id="rankTabRhythm" type="button">🎵 리듬 게임</button>
+        <button class="auth-tab" id="rankTabQuiz" type="button">🥁 악보 퀴즈</button>
+      </div>
+      <div id="rankListContainer" style="max-height:420px; overflow-y:auto; margin-top:8px;">
         <table class="rank-table">
           <thead>
             <tr>
               <th>순위</th>
-              <th>아이디 (학번)</th>
-              <th>점수 / 성적</th>
-              <th>날짜</th>
+              <th>학번 / 아이디 (이름)</th>
+              <th>점수 / 상세</th>
+              <th>최근 기록일</th>
             </tr>
           </thead>
           <tbody id="rankTableBody">
@@ -2223,13 +2229,39 @@ function saveGameScore(gameType, scoreDetail) {
       rhythmScore: newRhythm
     });
     db.ref('leaderboards/' + gameType + '/' + currentUser.uid).set(record);
+    db.ref('leaderboards/total/' + currentUser.uid).set({
+      uid: currentUser.uid,
+      studentId: currentUser.studentId || '',
+      name: currentUser.name + (currentUser.school ? (' (' + currentUser.school + ')') : ''),
+      score: total,
+      detail: '퀴즈 ' + newQuiz + '점 / 리듬 ' + newRhythm + '점',
+      date: nowStr,
+      timestamp: Date.now()
+    });
 
     currentUser.score = total;
     $('userScoreBadge').textContent = '총점: ' + total + '점';
   });
 }
 
+var currentRankTab = 'total';
+
+function updateRankTabsUI(activeTab) {
+  var tTotal = $('rankTabTotal');
+  var tRhythm = $('rankTabRhythm');
+  var tQuiz = $('rankTabQuiz');
+  if (tTotal && tRhythm && tQuiz) {
+    tTotal.classList.toggle('active', activeTab === 'total');
+    tRhythm.classList.toggle('active', activeTab === 'rhythm');
+    tQuiz.classList.toggle('active', activeTab === 'quiz');
+  }
+}
+
 function loadLeaderboard(gameType) {
+  gameType = gameType || currentRankTab || 'total';
+  currentRankTab = gameType;
+  updateRankTabsUI(gameType);
+
   var tbody = $('rankTableBody');
   tbody.innerHTML = '<tr><td colspan="4" style="color:var(--muted); padding:20px;">랭킹 불러오는 중...</td></tr>';
   
@@ -2239,28 +2271,102 @@ function loadLeaderboard(gameType) {
   }
 
   Promise.all([
-    db.ref('leaderboards/' + gameType).orderByChild('score').once('value'),
+    db.ref('leaderboards/' + gameType).once('value'),
     db.ref('users').once('value')
   ]).then(function(results) {
     var lbSnap = results[0];
     var usersSnap = results[1];
 
-    var usersMap = {};
-    if (usersSnap && usersSnap.exists()) {
-      usersSnap.forEach(function(uChild) {
-        var uVal = uChild.val() || {};
-        usersMap[uChild.key] = uVal.studentId || uVal.uid || '';
+    var lbMap = {};
+    if (lbSnap && lbSnap.exists()) {
+      lbSnap.forEach(function(child) {
+        lbMap[child.key] = child.val();
       });
     }
 
     var list = [];
-    lbSnap.forEach(function(child) {
-      list.push(child.val());
+
+    if (usersSnap && usersSnap.exists()) {
+      usersSnap.forEach(function(uChild) {
+        var uid = uChild.key;
+        var uVal = uChild.val() || {};
+
+        // 관리자 계정은 학생 랭킹에서 제외
+        if (uVal.isAdmin || uid === 'admin_juteacher' || uVal.studentId === 'juteacher' || (uVal.email && uVal.email.includes('juteacher'))) {
+          return;
+        }
+
+        var studentId = uVal.studentId || uid;
+        if (studentId === uid) {
+          try {
+            var decoded = decodeURIComponent(escape(atob(uid.replace(/_/g, '/'))));
+            if (decoded && !decoded.includes('{')) studentId = decoded;
+          } catch(e) {}
+        }
+
+        var score = 0;
+        var detail = '';
+        var date = '';
+
+        var lbRecord = lbMap[uid];
+
+        if (gameType === 'total') {
+          score = (typeof uVal.totalScore === 'number') ? uVal.totalScore : ((uVal.quizScore || 0) + (uVal.rhythmScore || 0));
+          var parts = [];
+          if (uVal.quizScore) parts.push('퀴즈 ' + uVal.quizScore + '점');
+          if (uVal.rhythmScore) parts.push('리듬 ' + uVal.rhythmScore + '점');
+          detail = parts.join(' / ') || (score > 0 ? score + '점' : '기록 없음');
+          date = (uVal.rhythm && uVal.rhythm.date) || (uVal.quiz && uVal.quiz.date) || (uVal.createdAt ? new Date(uVal.createdAt).toLocaleDateString('ko-KR', {month:'short', day:'numeric'}) : '');
+        } else if (gameType === 'rhythm') {
+          score = (lbRecord && typeof lbRecord.score === 'number') ? lbRecord.score : (uVal.rhythmScore || (uVal.rhythm && uVal.rhythm.score) || 0);
+          detail = (lbRecord && lbRecord.detail) || (uVal.rhythm && uVal.rhythm.detail) || (score > 0 ? score + '점' : '미참여');
+          date = (lbRecord && lbRecord.date) || (uVal.rhythm && uVal.rhythm.date) || '';
+        } else if (gameType === 'quiz') {
+          score = (lbRecord && typeof lbRecord.score === 'number') ? lbRecord.score : (uVal.quizScore || (uVal.quiz && uVal.quiz.score) || 0);
+          detail = (lbRecord && lbRecord.detail) || (uVal.quiz && uVal.quiz.detail) || (score > 0 ? score + '점' : '미참여');
+          date = (lbRecord && lbRecord.date) || (uVal.quiz && uVal.quiz.date) || '';
+        }
+
+        var rawName = uVal.name || '학생';
+        var schoolStr = uVal.school ? (' (' + uVal.school + ')') : '';
+
+        list.push({
+          uid: uid,
+          studentId: studentId,
+          name: rawName + schoolStr,
+          score: score,
+          detail: detail,
+          date: date
+        });
+      });
+    }
+
+    // users에 등록되지 않은 추가 리더보드 항목 처리
+    for (var key in lbMap) {
+      var found = list.some(function(item) { return item.uid === key; });
+      if (!found) {
+        var item = lbMap[key];
+        list.push({
+          uid: key,
+          studentId: item.studentId || key,
+          name: item.name || '학생',
+          score: item.score || 0,
+          detail: item.detail || '',
+          date: item.date || ''
+        });
+      }
+    }
+
+    // 점수 내림차순 정렬 (동점 시 학번/아이디 순)
+    list.sort(function(a, b) {
+      if (b.score !== a.score) {
+        return b.score - a.score;
+      }
+      return a.studentId.localeCompare(b.studentId);
     });
-    list.reverse();
 
     if (list.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="4" style="color:var(--muted); padding:20px;">아직 등록된 랭킹 기록이 없습니다.<br>첫 번째 주인공이 되어보세요!</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="4" style="color:var(--muted); padding:20px;">아직 등록된 학생 랭킹 기록이 없습니다.<br>첫 번째 주인공이 되어보세요!</td></tr>';
       return;
     }
 
@@ -2269,23 +2375,11 @@ function loadLeaderboard(gameType) {
       var rankNum = idx + 1;
       var rankBadgeClass = rankNum <= 3 ? ('rank-' + rankNum) : '';
       
-      // 학번(아이디) 결정: 1) item.studentId 2) users profile의 studentId 3) item.uid (base64 디코딩 시도) 4) item.uid 또는 '-'
-      var displayId = item.studentId || (item.uid ? usersMap[item.uid] : '');
-      if (!displayId && item.uid) {
-        try {
-          var decoded = decodeURIComponent(escape(atob(item.uid.replace(/_/g, '/'))));
-          if (decoded && !decoded.includes('{')) displayId = decoded;
-        } catch(e) {}
-      }
-      if (!displayId) {
-        displayId = item.uid || '-';
-      }
-
       html += '<tr>' +
         '<td><span class="rank-badge ' + rankBadgeClass + '">' + rankNum + '</span></td>' +
-        '<td><b>' + displayId + '</b></td>' +
-        '<td><span style="color:var(--lime); font-weight:bold;">' + item.score + '점</span> ' + (item.detail ? '<small style="color:var(--muted); font-size:11px;">(' + item.detail + ')</small>' : '') + '</td>' +
-        '<td style="color:var(--muted); font-size:12px;">' + (item.date || '') + '</td>' +
+        '<td><b>' + item.studentId + '</b> <small style="color:var(--muted); font-size:12px;">(' + item.name + ')</small></td>' +
+        '<td><span style="color:var(--lime); font-weight:bold;">' + item.score + '점</span> ' + (item.detail ? '<br><small style="color:var(--muted); font-size:11px;">' + item.detail + '</small>' : '') + '</td>' +
+        '<td style="color:var(--muted); font-size:12px;">' + (item.date || '-') + '</td>' +
       '</tr>';
     });
     tbody.innerHTML = html;
@@ -2363,6 +2457,7 @@ window.deleteUserAccount = function(uid, name) {
   db.ref('users/' + uid).remove().then(function() {
     db.ref('leaderboards/quiz/' + uid).remove();
     db.ref('leaderboards/rhythm/' + uid).remove();
+    db.ref('leaderboards/total/' + uid).remove();
     alert('계정이 삭제되었습니다.');
     loadAdminUserList();
   }).catch(function(err) {
@@ -2454,8 +2549,11 @@ function init(){
   $('loginForm').onsubmit = function(e){ e.preventDefault(); handleLogin($('loginEmail').value, $('loginPassword').value); };
   $('signupForm').onsubmit = function(e){ e.preventDefault(); handleSignup($('signupName').value, $('signupId').value, $('signupSchool').value, $('signupPassword').value); };
   $('logoutBtn').onclick = handleLogout;
-  $('openRankBtn').onclick = function(){ loadLeaderboard('rhythm'); $('rankingModal').classList.add('show'); armBackNav(); };
+  $('openRankBtn').onclick = function(){ loadLeaderboard('total'); $('rankingModal').classList.add('show'); armBackNav(); };
   $('closeRankModal').onclick = function(){ $('rankingModal').classList.remove('show'); };
+  $('rankTabTotal').onclick = function(){ loadLeaderboard('total'); };
+  $('rankTabRhythm').onclick = function(){ loadLeaderboard('rhythm'); };
+  $('rankTabQuiz').onclick = function(){ loadLeaderboard('quiz'); };
   $('openConfigBtn').onclick = function(){ $('cfgApiKey').value = localStorage.getItem('drum_fb_apikey')||''; $('configModal').classList.add('show'); armBackNav(); };
   $('closeConfigModal').onclick = function(){ $('configModal').classList.remove('show'); };
   $('saveConfigBtn').onclick = function(){
