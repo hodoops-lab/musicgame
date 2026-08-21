@@ -1029,7 +1029,7 @@ function finishQuiz(){
   $('noteTotal').textContent = total;
   
   var qScore = quiz.correct * 10;
-  saveGameScore('quiz', { score: qScore, detail: quiz.correct + '/' + total + '개 정답' });
+  saveGameScore('quiz', { score: qScore, detail: quiz.correct + '/' + total + '개 정답', accuracy: Math.round(acc*100) });
 
   showScreen('noteResult');
 }
@@ -1913,7 +1913,7 @@ function finishRLevel(){
   $('rNextBtn').onclick = function(){ startRLevel(rstate.catKey, isLast?1:rstate.stage+1); };
   $('rRetryBtn').onclick = function(){ startRLevel(rstate.catKey, rstate.stage); };
 
-  saveGameScore('rhythm', { score: rstate.score, detail: CATS[rstate.catKey].label + ' ' + rstate.stage + '단계 (' + acc + '%)' });
+  saveGameScore('rhythm', { score: rstate.score, detail: CATS[rstate.catKey].label + ' ' + rstate.stage + '단계 (' + acc + '%)', accuracy: acc });
 
   showScreen('rResult');
 }
@@ -2027,7 +2027,11 @@ function fetchUserProfile(uid, email, defaultName) {
       score: score,
       isAdmin: isAdmin,
       quizScore: val.quizScore || 0,
-      rhythmScore: val.rhythmScore || 0
+      rhythmScore: val.rhythmScore || 0,
+      quizAttempts: val.quizAttempts || 0,
+      quizAccSum: val.quizAccSum || 0,
+      rhythmAttempts: val.rhythmAttempts || 0,
+      rhythmAccSum: val.rhythmAccSum || 0
     };
 
     localStorage.setItem('drum_current_uid', uid);
@@ -2214,14 +2218,36 @@ function saveGameScore(gameType, scoreDetail) {
   var newQuiz = gameType==='quiz' ? prevQuiz + scoreDetail.score : prevQuiz;
   var newRhythm = gameType==='rhythm' ? prevRhythm + scoreDetail.score : prevRhythm;
   var total = newQuiz + newRhythm;
-  var cumulativeScore = gameType==='quiz' ? newQuiz : newRhythm;
   var displayName = currentUser.name + (currentUser.school ? (' (' + currentUser.school + ')') : '');
+
+  // ---- 랭킹(순위) 산정용 점수: "쌓은 점수 × 평균 정확도" ----
+  // 점수만 쌓으면(많이 플레이하기만 하면) 정확도가 낮아도 상위권에 오르던 문제를 고치기 위해,
+  // 플레이할 때마다의 정확도(%)를 누적 평균 내서 랭킹 점수에 곱해준다.
+  // 예) 점수는 같아도 평균 정확도가 90%인 사람과 40%인 사람은 랭킹 점수가 다르게 나온다.
+  // 난이도(4분음표<8분음표<16분음표)에 따라 점수가 다른 것은 기존 채점(한 박을 완벽히 쳤을 때만
+  // 점수를 주는 방식)에 이미 반영되어 있으므로 그대로 두고, "정확도"만 추가로 곱해서 보정한다.
+  var roundAcc = Math.max(0, Math.min(100, scoreDetail.accuracy || 0));
+  var prevQuizAttempts = currentUser.quizAttempts || 0, prevQuizAccSum = currentUser.quizAccSum || 0;
+  var prevRhythmAttempts = currentUser.rhythmAttempts || 0, prevRhythmAccSum = currentUser.rhythmAccSum || 0;
+  var newQuizAttempts = gameType==='quiz' ? prevQuizAttempts+1 : prevQuizAttempts;
+  var newQuizAccSum = gameType==='quiz' ? prevQuizAccSum+roundAcc : prevQuizAccSum;
+  var newRhythmAttempts = gameType==='rhythm' ? prevRhythmAttempts+1 : prevRhythmAttempts;
+  var newRhythmAccSum = gameType==='rhythm' ? prevRhythmAccSum+roundAcc : prevRhythmAccSum;
+
+  var quizAvgAcc = newQuizAttempts ? newQuizAccSum/newQuizAttempts : 0;
+  var rhythmAvgAcc = newRhythmAttempts ? newRhythmAccSum/newRhythmAttempts : 0;
+  var quizRankScore = Math.round(newQuiz * (quizAvgAcc/100));
+  var rhythmRankScore = Math.round(newRhythm * (rhythmAvgAcc/100));
+  var thisRankScore = gameType==='quiz' ? quizRankScore : rhythmRankScore;
+  var thisAvgAcc = Math.round(gameType==='quiz' ? quizAvgAcc : rhythmAvgAcc);
 
   var record = {
     uid: uid,
     studentId: currentUser.studentId || '',
     name: displayName,
-    score: cumulativeScore,
+    score: thisRankScore,
+    rawScore: gameType==='quiz' ? newQuiz : newRhythm,
+    accuracy: thisAvgAcc,
     detail: scoreDetail.detail || '',
     date: nowStr,
     timestamp: Date.now()
@@ -2230,8 +2256,8 @@ function saveGameScore(gameType, scoreDetail) {
     uid: uid,
     studentId: currentUser.studentId || '',
     name: displayName,
-    score: total,
-    detail: '퀴즈 ' + newQuiz + '점 / 리듬 ' + newRhythm + '점',
+    score: quizRankScore + rhythmRankScore,
+    detail: '퀴즈 ' + newQuiz + '점(정확도 ' + Math.round(quizAvgAcc) + '%) / 리듬 ' + newRhythm + '점(정확도 ' + Math.round(rhythmAvgAcc) + '%)',
     date: nowStr,
     timestamp: Date.now()
   };
@@ -2240,6 +2266,10 @@ function saveGameScore(gameType, scoreDetail) {
   updates['users/' + uid + '/totalScore'] = total;
   updates['users/' + uid + '/quizScore'] = newQuiz;
   updates['users/' + uid + '/rhythmScore'] = newRhythm;
+  updates['users/' + uid + '/quizAttempts'] = newQuizAttempts;
+  updates['users/' + uid + '/quizAccSum'] = newQuizAccSum;
+  updates['users/' + uid + '/rhythmAttempts'] = newRhythmAttempts;
+  updates['users/' + uid + '/rhythmAccSum'] = newRhythmAccSum;
   updates['users/' + uid + '/' + gameType] = record;
   updates['leaderboards/' + gameType + '/' + uid] = record;
   updates['leaderboards/total/' + uid] = totalRecord;
@@ -2248,6 +2278,10 @@ function saveGameScore(gameType, scoreDetail) {
 
   currentUser.quizScore = newQuiz;
   currentUser.rhythmScore = newRhythm;
+  currentUser.quizAttempts = newQuizAttempts;
+  currentUser.quizAccSum = newQuizAccSum;
+  currentUser.rhythmAttempts = newRhythmAttempts;
+  currentUser.rhythmAccSum = newRhythmAccSum;
   currentUser.score = total;
   $('userScoreBadge').textContent = '총점: ' + total + '점';
 }
@@ -2348,24 +2382,29 @@ function loadLeaderboard(gameType) {
         var score = 0;
         var detail = '';
         var date = '';
+        var accuracy = null;
 
         var lbRecord = lbMap[uid];
 
+        // gameType 'rhythm'/'quiz'의 score는 "누적 점수 × 평균 정확도"로 보정된 랭킹 점수(leaderboards/{gameType}/{uid}.score).
+        // 정확도가 낮은데 많이 플레이했다고 무조건 순위가 높아지지 않도록, 정확도가 랭킹 점수에 반영돼있다.
         if (gameType === 'rhythm') {
           score = (lbRecord && typeof lbRecord.score === 'number') ? lbRecord.score : (uVal.rhythmScore || (uVal.rhythm && uVal.rhythm.score) || 0);
           detail = (lbRecord && lbRecord.detail) || (uVal.rhythm && uVal.rhythm.detail) || (score > 0 ? score + '점' : '미참여');
           date = (lbRecord && lbRecord.date) || (uVal.rhythm && uVal.rhythm.date) || '';
+          accuracy = lbRecord && typeof lbRecord.accuracy === 'number' ? lbRecord.accuracy : null;
         } else if (gameType === 'quiz') {
           score = (lbRecord && typeof lbRecord.score === 'number') ? lbRecord.score : (uVal.quizScore || (uVal.quiz && uVal.quiz.score) || 0);
           detail = (lbRecord && lbRecord.detail) || (uVal.quiz && uVal.quiz.detail) || (score > 0 ? score + '점' : '미참여');
           date = (lbRecord && lbRecord.date) || (uVal.quiz && uVal.quiz.date) || '';
+          accuracy = lbRecord && typeof lbRecord.accuracy === 'number' ? lbRecord.accuracy : null;
         } else {
-          score = (typeof uVal.totalScore === 'number') ? uVal.totalScore : ((uVal.quizScore || 0) + (uVal.rhythmScore || 0));
+          score = (lbRecord && typeof lbRecord.score === 'number') ? lbRecord.score : ((typeof uVal.totalScore === 'number') ? uVal.totalScore : ((uVal.quizScore || 0) + (uVal.rhythmScore || 0)));
           var parts = [];
           if (uVal.rhythmScore) parts.push('리듬 ' + uVal.rhythmScore + '점');
           if (uVal.quizScore) parts.push('퀴즈 ' + uVal.quizScore + '점');
-          detail = parts.join(' / ') || (score > 0 ? score + '점' : '기록 없음');
-          date = (uVal.rhythm && uVal.rhythm.date) || (uVal.quiz && uVal.quiz.date) || (uVal.createdAt ? new Date(uVal.createdAt).toLocaleDateString('ko-KR', {month:'short', day:'numeric'}) : '');
+          detail = (lbRecord && lbRecord.detail) || parts.join(' / ') || (score > 0 ? score + '점' : '기록 없음');
+          date = (lbRecord && lbRecord.date) || (uVal.rhythm && uVal.rhythm.date) || (uVal.quiz && uVal.quiz.date) || (uVal.createdAt ? new Date(uVal.createdAt).toLocaleDateString('ko-KR', {month:'short', day:'numeric'}) : '');
         }
 
         list.push({
@@ -2373,7 +2412,8 @@ function loadLeaderboard(gameType) {
           studentId: studentId,
           score: score,
           detail: detail,
-          date: date
+          date: date,
+          accuracy: accuracy
         });
       });
     }
@@ -2388,7 +2428,8 @@ function loadLeaderboard(gameType) {
           studentId: item.studentId || key,
           score: item.score || 0,
           detail: item.detail || '',
-          date: item.date || ''
+          date: item.date || '',
+          accuracy: typeof item.accuracy === 'number' ? item.accuracy : null
         });
       }
     }
@@ -2411,10 +2452,11 @@ function loadLeaderboard(gameType) {
       var rankNum = idx + 1;
       var rankBadgeClass = rankNum <= 3 ? ('rank-' + rankNum) : '';
       
+      var accBadge = (typeof item.accuracy === 'number') ? ' <span style="color:var(--gold); font-size:11px;">(평균 정확도 ' + item.accuracy + '%)</span>' : '';
       html += '<tr>' +
         '<td><span class="rank-badge ' + rankBadgeClass + '">' + rankNum + '</span></td>' +
         '<td><b>' + item.studentId + '</b></td>' +
-        '<td><span style="color:var(--lime); font-weight:bold;">' + item.score + '점</span> ' + (item.detail ? '<br><small style="color:var(--muted); font-size:11px;">(' + item.detail + ')</small>' : '') + '</td>' +
+        '<td><span style="color:var(--lime); font-weight:bold;">' + item.score + '점</span>' + accBadge + ' ' + (item.detail ? '<br><small style="color:var(--muted); font-size:11px;">(' + item.detail + ')</small>' : '') + '</td>' +
         '<td style="color:var(--muted); font-size:12px;">' + (item.date || '-') + '</td>' +
       '</tr>';
     });
