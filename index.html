@@ -492,12 +492,7 @@
     <div class="modal-box" style="max-width:600px;">
       <button class="modal-close" id="closeRankModal">&times;</button>
       <h2 class="stitle" id="rankModalTitle" style="text-align:center;">🏆 드럼 마스터 리듬게임 랭킹</h2>
-      <p id="rankModalDesc" style="font-size:12px; color:var(--muted); text-align:center; margin:4px 0 14px;">참여한 모든 학생의 리듬게임 랭킹 목록입니다.</p>
-      <div id="rankTabsWrap" class="auth-tabs hidden" style="justify-content:center; margin-bottom:12px;">
-        <button class="auth-tab active" id="rankTabRhythm" type="button">🎵 리듬 게임</button>
-        <button class="auth-tab" id="rankTabQuiz" type="button">🥁 악보 퀴즈 (관리자)</button>
-        <button class="auth-tab" id="rankTabTotal" type="button">🏆 전체 (총점)</button>
-      </div>
+      <p id="rankModalDesc" style="font-size:12px; color:var(--muted); text-align:center; margin:4px 0 14px;">참여한 모든 학생의 리듬게임 랭킹 목록입니다. (정확도 기준 · 악보 매칭 퀴즈는 랭킹에 반영되지 않습니다)</p>
       <div id="rankListContainer" style="max-height:420px; overflow-y:auto; margin-top:8px;">
         <table class="rank-table">
           <thead>
@@ -539,7 +534,10 @@
     <div class="modal-box" style="max-width:820px;">
       <button class="modal-close" id="closeAdminModal">&times;</button>
       <h2 class="stitle" style="text-align:center;">👑 회원 관리 (관리자 전용)</h2>
-      <p style="font-size:12px; color:var(--muted); text-align:center; margin-bottom:14px;">등록된 가입 회원 목록을 조회하고 퀴즈/리듬 점수 확인 및 계정 정보를 수정/삭제할 수 있습니다.</p>
+      <p style="font-size:12px; color:var(--muted); text-align:center; margin-bottom:14px;">등록된 가입 회원 목록을 조회하고 랭킹 점수 확인 및 계정 정보를 수정/삭제할 수 있습니다. (퀴즈는 참고용 기록일 뿐 랭킹에는 반영되지 않습니다)</p>
+      <div style="display:flex; justify-content:center; margin-bottom:10px;">
+        <button class="btn secondary small" id="migrateRankBtn" type="button">🔄 랭킹 점수 재계산 (정확도 기준으로 마이그레이션)</button>
+      </div>
       <div id="adminUserContainer" style="max-height:400px; overflow-y:auto;">
         <table class="rank-table">
           <thead>
@@ -548,9 +546,9 @@
               <th>이름</th>
               <th>학번</th>
               <th>학교명</th>
-              <th>리듬점수</th>
-              <th>퀴즈점수</th>
-              <th>총점</th>
+              <th>리듬 누적점수(참고용)</th>
+              <th>퀴즈 정답수(랭킹 제외)</th>
+              <th>랭킹 점수</th>
               <th>가입일</th>
               <th>관리</th>
             </tr>
@@ -1028,8 +1026,7 @@ function finishQuiz(){
   $('noteCorrect').textContent = quiz.correct;
   $('noteTotal').textContent = total;
   
-  var qScore = quiz.correct * 10;
-  saveGameScore('quiz', { score: qScore, detail: quiz.correct + '/' + total + '개 정답', accuracy: Math.round(acc*100) });
+  // 악보 매칭 퀴즈는 랭킹 점수를 주지 않는다(정책) - saveGameScore를 호출하지 않는다.
 
   showScreen('noteResult');
 }
@@ -1913,7 +1910,10 @@ function finishRLevel(){
   $('rNextBtn').onclick = function(){ startRLevel(rstate.catKey, isLast?1:rstate.stage+1); };
   $('rRetryBtn').onclick = function(){ startRLevel(rstate.catKey, rstate.stage); };
 
-  saveGameScore('rhythm', { score: rstate.score, detail: CATS[rstate.catKey].label + ' ' + rstate.stage + '단계 (' + acc + '%)', accuracy: acc });
+  // 학습하기(연습) 모드는 무한 반복 루프라 애초에 finishRLevel까지 오지 않지만, 혹시 몰라 이중 방어.
+  if(!rstate.practice){
+    saveGameScore('rhythm', { score: rstate.score, detail: CATS[rstate.catKey].label + ' ' + rstate.stage + '단계 (' + acc + '%)', accuracy: acc, catKey: rstate.catKey });
+  }
 
   showScreen('rResult');
 }
@@ -2005,7 +2005,7 @@ function fetchUserProfile(uid, email, defaultName) {
   if (!db) {
     currentUser = { uid: uid, name: defaultName || (email ? email.split('@')[0] : '학생'), email: email, score: 0 };
     $('userDisplayName').textContent = '👤 ' + currentUser.name;
-    $('userScoreBadge').textContent = '총점: 0점';
+    $('userScoreBadge').textContent = '랭킹 점수: 0점';
     $('openAuthBtn').classList.add('hidden');
     $('logoutBtn').classList.remove('hidden');
     $('openAdminBtn').classList.add('hidden');
@@ -2015,9 +2015,10 @@ function fetchUserProfile(uid, email, defaultName) {
   db.ref('users/' + uid).once('value').then(function(snapshot) {
     var val = snapshot.val() || {};
     var name = val.name || defaultName || (email ? email.split('@')[0] : '학생');
-    var score = val.totalScore || 0;
+    // 랭킹 점수 = 정확도 기준(요구사항 1). 더 이상 quizScore/totalScore는 랭킹에 쓰지 않는다.
+    var score = val.rhythmRankScore || 0;
     var isAdmin = val.isAdmin || (val.studentId === 'juteacher') || (val.email && val.email.includes('juteacher'));
-    
+
     currentUser = {
       uid: uid,
       name: name,
@@ -2026,27 +2027,24 @@ function fetchUserProfile(uid, email, defaultName) {
       email: email,
       score: score,
       isAdmin: isAdmin,
-      quizScore: val.quizScore || 0,
       rhythmScore: val.rhythmScore || 0,
-      quizAttempts: val.quizAttempts || 0,
-      quizAccSum: val.quizAccSum || 0,
       rhythmAttempts: val.rhythmAttempts || 0,
-      rhythmAccSum: val.rhythmAccSum || 0
+      rhythmWAccSum: val.rhythmWAccSum || 0
     };
 
     localStorage.setItem('drum_current_uid', uid);
     if(email) localStorage.setItem('drum_current_email', email);
-    
+
     if (isAdmin) {
       $('userDisplayName').textContent = '👑 관리자 (' + (val.studentId || 'juteacher') + ')';
       $('userScoreBadge').textContent = '관리자 모드';
       $('openAdminBtn').classList.remove('hidden');
     } else {
       $('userDisplayName').textContent = '👤 ' + name + (val.school ? (' (' + val.school + ')') : '');
-      $('userScoreBadge').textContent = '총점: ' + score + '점';
+      $('userScoreBadge').textContent = '랭킹 점수: ' + score + '점';
       $('openAdminBtn').classList.add('hidden');
     }
-    
+
     $('openAuthBtn').classList.add('hidden');
     $('logoutBtn').classList.remove('hidden');
   }).catch(function(err) {
@@ -2054,7 +2052,7 @@ function fetchUserProfile(uid, email, defaultName) {
     var name = defaultName || (email ? email.split('@')[0] : '학생');
     currentUser = { uid: uid, name: name, email: email, score: 0 };
     $('userDisplayName').textContent = '👤 ' + name;
-    $('userScoreBadge').textContent = '총점: 0점';
+    $('userScoreBadge').textContent = '랭킹 점수: 0점';
     $('openAuthBtn').classList.add('hidden');
     $('logoutBtn').classList.remove('hidden');
     $('openAdminBtn').classList.add('hidden');
@@ -2111,12 +2109,16 @@ function fallbackDbSignup(name, rawId, school, email, password, authErr) {
         studentId: rawId,
         school: school,
         email: email,
-        passwordHash: password,
         createdAt: Date.now(),
         totalScore: 0,
         isAdmin: false
       };
-      db.ref('users/' + safeId).set(userData).then(function() {
+      // 비밀번호는 랭킹/관리자 목록이 통째로 읽어가는 users/{uid}에 함께 넣지 않고,
+      // 별도의 authSecrets/{uid} 경로에만 저장한다 (랭킹을 열어본 다른 학생에게 노출되지 않도록).
+      Promise.all([
+        db.ref('users/' + safeId).set(userData),
+        db.ref('authSecrets/' + safeId).set({ passwordHash: password })
+      ]).then(function() {
         showAuthMsg('회원가입 완료! 로그인 중...', true);
         fetchUserProfile(safeId, email, name);
         setTimeout(closeAuthModal, 1000);
@@ -2158,9 +2160,15 @@ function fallbackDbLogin(rawId, email, password, authErr) {
     return;
   }
   var safeId = btoa(unescape(encodeURIComponent(rawId))).replace(/[/+=]/g, '_');
-  db.ref('users/' + safeId).once('value').then(function(snapshot) {
-    var val = snapshot.val();
-    if (val && (val.passwordHash === password || !val.passwordHash)) {
+  Promise.all([
+    db.ref('users/' + safeId).once('value'),
+    db.ref('authSecrets/' + safeId).once('value')
+  ]).then(function(results) {
+    var val = results[0].val();
+    var secret = results[1].val();
+    // 예전에 users/{uid} 안에 비밀번호를 같이 저장했던 계정과의 호환을 위해 val.passwordHash도 함께 확인한다.
+    var storedHash = (secret && secret.passwordHash) || (val && val.passwordHash);
+    if (val && (storedHash === password || !storedHash)) {
       showAuthMsg('로그인 성공!', true);
       fetchUserProfile(safeId, email, val.name);
       setTimeout(closeAuthModal, 800);
@@ -2202,140 +2210,64 @@ function switchAuthTab(tab) {
 }
 
 function saveGameScore(gameType, scoreDetail) {
+  // 악보 매칭(퀴즈)은 절대 랭킹 점수를 주지 않는다 - 정책상 완전히 배제. (요구사항 1)
+  if (gameType !== 'rhythm') return;
   // 게스트(비로그인)이거나 관리자(isAdmin)이면 랭킹 및 데이터베이스에 저장하지 않음!
   if (!currentUser || !currentUser.uid || !db || currentUser.isAdmin) return;
 
   var nowStr = new Date().toLocaleDateString('ko-KR', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
   var uid = currentUser.uid;
-
-  // 한 판의 최고 점수만 남기던 것을, 플레이할 때마다 점수를 계속 누적(합산)하도록 바꿔서
-  // 한 판에서 낼 수 있는 최대치(예: 304점)에서 더 안 오르고 막히지 않고, 플레이한 만큼 계속 올라가게 한다.
-  // 여러 학생이 동시에 접속했을 때 네트워크 왕복 횟수를 줄이기 위해(끊김 완화):
-  // 저장 직전에 다시 서버에서 읽어오지 않고, 로그인 시 캐시해둔 currentUser의 점수를 그대로 누적해서
-  // 쓰기 요청 여러 번(읽기 1번 + 쓰기 4번) 대신 한 번의 다중 경로 update() 호출로 합친다.
-  var prevQuiz = currentUser.quizScore || 0;
-  var prevRhythm = currentUser.rhythmScore || 0;
-  var newQuiz = gameType==='quiz' ? prevQuiz + scoreDetail.score : prevQuiz;
-  var newRhythm = gameType==='rhythm' ? prevRhythm + scoreDetail.score : prevRhythm;
-  var total = newQuiz + newRhythm;
   var displayName = currentUser.name + (currentUser.school ? (' (' + currentUser.school + ')') : '');
 
-  // ---- 랭킹(순위) 산정용 점수: "쌓은 점수 × 평균 정확도" ----
-  // 점수만 쌓으면(많이 플레이하기만 하면) 정확도가 낮아도 상위권에 오르던 문제를 고치기 위해,
-  // 플레이할 때마다의 정확도(%)를 누적 평균 내서 랭킹 점수에 곱해준다.
-  // 예) 점수는 같아도 평균 정확도가 90%인 사람과 40%인 사람은 랭킹 점수가 다르게 나온다.
-  // 난이도(4분음표<8분음표<16분음표)에 따라 점수가 다른 것은 기존 채점(한 박을 완벽히 쳤을 때만
-  // 점수를 주는 방식)에 이미 반영되어 있으므로 그대로 두고, "정확도"만 추가로 곱해서 보정한다.
-  var roundAcc = Math.max(0, Math.min(100, scoreDetail.accuracy || 0));
-  var prevQuizAttempts = currentUser.quizAttempts || 0, prevQuizAccSum = currentUser.quizAccSum || 0;
-  var prevRhythmAttempts = currentUser.rhythmAttempts || 0, prevRhythmAccSum = currentUser.rhythmAccSum || 0;
-  var newQuizAttempts = gameType==='quiz' ? prevQuizAttempts+1 : prevQuizAttempts;
-  var newQuizAccSum = gameType==='quiz' ? prevQuizAccSum+roundAcc : prevQuizAccSum;
-  var newRhythmAttempts = gameType==='rhythm' ? prevRhythmAttempts+1 : prevRhythmAttempts;
-  var newRhythmAccSum = gameType==='rhythm' ? prevRhythmAccSum+roundAcc : prevRhythmAccSum;
+  // 게임 내 누적 점수(코인)는 랭킹에는 더 이상 쓰이지 않지만 개인 기록용으로 계속 쌓아둔다.
+  var newRhythm = (currentUser.rhythmScore || 0) + scoreDetail.score;
 
-  var quizAvgAcc = newQuizAttempts ? newQuizAccSum/newQuizAttempts : 0;
-  var rhythmAvgAcc = newRhythmAttempts ? newRhythmAccSum/newRhythmAttempts : 0;
-  var quizRankScore = Math.round(newQuiz * (quizAvgAcc/100));
-  var rhythmRankScore = Math.round(newRhythm * (rhythmAvgAcc/100));
-  var thisRankScore = gameType==='quiz' ? quizRankScore : rhythmRankScore;
-  var thisAvgAcc = Math.round(gameType==='quiz' ? quizAvgAcc : rhythmAvgAcc);
+  // ---- 랭킹(순위) 산정용 점수: "정확도" 그 자체를 카테고리 가중치로 보정한 값 ----
+  // 8비트는 정확도의 80%만, 16비트/8+16비트 혼합은 정확도의 100%를 랭킹 점수로 반영한다.
+  // 여러 판 플레이한 정확도를 누적 평균 내서(순간 컨디션보다 꾸준한 실력이 반영되도록) 갱신한다.
+  var roundAcc = Math.max(0, Math.min(100, scoreDetail.accuracy || 0));
+  var catKey = scoreDetail.catKey || 'sixteen';
+  var weight = catKey === 'eight' ? 0.8 : 1.0; // 16비트 / 8+16비트 혼합 = 100%
+  var weightedAcc = roundAcc * weight;
+
+  var newAttempts = (currentUser.rhythmAttempts || 0) + 1;
+  var newWAccSum = (currentUser.rhythmWAccSum || 0) + weightedAcc;
+  var rankScore = Math.round(newWAccSum / newAttempts);
 
   var record = {
     uid: uid,
     studentId: currentUser.studentId || '',
     name: displayName,
-    score: thisRankScore,
-    rawScore: gameType==='quiz' ? newQuiz : newRhythm,
-    accuracy: thisAvgAcc,
+    score: rankScore,
+    accuracy: roundAcc,
+    catKey: catKey,
     detail: scoreDetail.detail || '',
     date: nowStr,
-    timestamp: Date.now()
-  };
-  var totalRecord = {
-    uid: uid,
-    studentId: currentUser.studentId || '',
-    name: displayName,
-    score: quizRankScore + rhythmRankScore,
-    detail: '퀴즈 ' + newQuiz + '점(정확도 ' + Math.round(quizAvgAcc) + '%) / 리듬 ' + newRhythm + '점(정확도 ' + Math.round(rhythmAvgAcc) + '%)',
-    date: nowStr,
-    timestamp: Date.now()
+    timestamp: Date.now(),
+    rankVersion: 2
   };
 
   var updates = {};
-  updates['users/' + uid + '/totalScore'] = total;
-  updates['users/' + uid + '/quizScore'] = newQuiz;
   updates['users/' + uid + '/rhythmScore'] = newRhythm;
-  updates['users/' + uid + '/quizAttempts'] = newQuizAttempts;
-  updates['users/' + uid + '/quizAccSum'] = newQuizAccSum;
-  updates['users/' + uid + '/rhythmAttempts'] = newRhythmAttempts;
-  updates['users/' + uid + '/rhythmAccSum'] = newRhythmAccSum;
-  updates['users/' + uid + '/' + gameType] = record;
-  updates['leaderboards/' + gameType + '/' + uid] = record;
-  updates['leaderboards/total/' + uid] = totalRecord;
+  updates['users/' + uid + '/rhythmAttempts'] = newAttempts;
+  updates['users/' + uid + '/rhythmWAccSum'] = newWAccSum;
+  updates['users/' + uid + '/rhythmRankScore'] = rankScore;
+  updates['users/' + uid + '/rankScoreV2'] = true;
+  updates['users/' + uid + '/rhythm'] = record;
+  updates['leaderboards/rhythm/' + uid] = record;
 
   db.ref().update(updates);
 
-  currentUser.quizScore = newQuiz;
   currentUser.rhythmScore = newRhythm;
-  currentUser.quizAttempts = newQuizAttempts;
-  currentUser.quizAccSum = newQuizAccSum;
-  currentUser.rhythmAttempts = newRhythmAttempts;
-  currentUser.rhythmAccSum = newRhythmAccSum;
-  currentUser.score = total;
-  $('userScoreBadge').textContent = '총점: ' + total + '점';
+  currentUser.rhythmAttempts = newAttempts;
+  currentUser.rhythmWAccSum = newWAccSum;
+  currentUser.score = rankScore;
+  $('userScoreBadge').textContent = '랭킹 점수: ' + rankScore + '점 (정확도 기준)';
 }
 
-var currentRankTab = 'rhythm';
-
-function updateRankTabsUI(activeTab) {
-  var tTotal = $('rankTabTotal');
-  var tRhythm = $('rankTabRhythm');
-  var tQuiz = $('rankTabQuiz');
-  if (tTotal && tRhythm && tQuiz) {
-    tRhythm.classList.toggle('active', activeTab === 'rhythm');
-    tQuiz.classList.toggle('active', activeTab === 'quiz');
-    tTotal.classList.toggle('active', activeTab === 'total');
-  }
-}
-
-function loadLeaderboard(gameType) {
-  var isAdmin = currentUser && currentUser.isAdmin;
-  
-  // 일반 사용자는 무조건 'rhythm' (리듬게임) 랭킹만 표시
-  if (!isAdmin) {
-    gameType = 'rhythm';
-  } else {
-    gameType = gameType || currentRankTab || 'rhythm';
-  }
-  currentRankTab = gameType;
-
-  // 관리자일 때만 탭 메뉴 표시
-  var tabsWrap = $('rankTabsWrap');
-  if (tabsWrap) {
-    if (isAdmin) {
-      tabsWrap.classList.remove('hidden');
-      updateRankTabsUI(gameType);
-    } else {
-      tabsWrap.classList.add('hidden');
-    }
-  }
-
-  // 타이틀 변경
-  var modalTitle = $('rankModalTitle');
-  var modalDesc = $('rankModalDesc');
-  if (modalTitle && modalDesc) {
-    if (!isAdmin || gameType === 'rhythm') {
-      modalTitle.textContent = '🏆 리듬 게임 랭킹';
-      modalDesc.textContent = '참여한 모든 학생의 리듬게임 랭킹 목록입니다.';
-    } else if (gameType === 'quiz') {
-      modalTitle.textContent = '🥁 악보 퀴즈 랭킹 (관리자 전용)';
-      modalDesc.textContent = '참여한 모든 학생의 악보 퀴즈 점수 현황입니다.';
-    } else {
-      modalTitle.textContent = '🏆 전체 랭킹 (관리자 전용)';
-      modalDesc.textContent = '퀴즈와 리듬게임 합산 점수 현황입니다.';
-    }
-  }
+function loadLeaderboard() {
+  // 랭킹에는 리듬게임만 표시한다(요구사항 2) - 악보 퀴즈/합산 랭킹은 없앰.
+  var gameType = 'rhythm';
 
   var tbody = $('rankTableBody');
   tbody.innerHTML = '<tr><td colspan="4" style="color:var(--muted); padding:20px;">랭킹 불러오는 중...</td></tr>';
@@ -2386,26 +2318,12 @@ function loadLeaderboard(gameType) {
 
         var lbRecord = lbMap[uid];
 
-        // gameType 'rhythm'/'quiz'의 score는 "누적 점수 × 평균 정확도"로 보정된 랭킹 점수(leaderboards/{gameType}/{uid}.score).
-        // 정확도가 낮은데 많이 플레이했다고 무조건 순위가 높아지지 않도록, 정확도가 랭킹 점수에 반영돼있다.
-        if (gameType === 'rhythm') {
-          score = (lbRecord && typeof lbRecord.score === 'number') ? lbRecord.score : (uVal.rhythmScore || (uVal.rhythm && uVal.rhythm.score) || 0);
-          detail = (lbRecord && lbRecord.detail) || (uVal.rhythm && uVal.rhythm.detail) || (score > 0 ? score + '점' : '미참여');
-          date = (lbRecord && lbRecord.date) || (uVal.rhythm && uVal.rhythm.date) || '';
-          accuracy = lbRecord && typeof lbRecord.accuracy === 'number' ? lbRecord.accuracy : null;
-        } else if (gameType === 'quiz') {
-          score = (lbRecord && typeof lbRecord.score === 'number') ? lbRecord.score : (uVal.quizScore || (uVal.quiz && uVal.quiz.score) || 0);
-          detail = (lbRecord && lbRecord.detail) || (uVal.quiz && uVal.quiz.detail) || (score > 0 ? score + '점' : '미참여');
-          date = (lbRecord && lbRecord.date) || (uVal.quiz && uVal.quiz.date) || '';
-          accuracy = lbRecord && typeof lbRecord.accuracy === 'number' ? lbRecord.accuracy : null;
-        } else {
-          score = (lbRecord && typeof lbRecord.score === 'number') ? lbRecord.score : ((typeof uVal.totalScore === 'number') ? uVal.totalScore : ((uVal.quizScore || 0) + (uVal.rhythmScore || 0)));
-          var parts = [];
-          if (uVal.rhythmScore) parts.push('리듬 ' + uVal.rhythmScore + '점');
-          if (uVal.quizScore) parts.push('퀴즈 ' + uVal.quizScore + '점');
-          detail = (lbRecord && lbRecord.detail) || parts.join(' / ') || (score > 0 ? score + '점' : '기록 없음');
-          date = (lbRecord && lbRecord.date) || (uVal.rhythm && uVal.rhythm.date) || (uVal.quiz && uVal.quiz.date) || (uVal.createdAt ? new Date(uVal.createdAt).toLocaleDateString('ko-KR', {month:'short', day:'numeric'}) : '');
-        }
+        // 랭킹 점수(score)는 "정확도(카테고리 가중치 적용)"의 누적 평균값(leaderboards/rhythm/{uid}.score).
+        // 쌓은 점수가 아니라 정확도 그 자체이므로, 많이 플레이했다고 무조건 순위가 높아지지 않는다.
+        score = (lbRecord && typeof lbRecord.score === 'number') ? lbRecord.score : (uVal.rhythmRankScore || 0);
+        detail = (lbRecord && lbRecord.detail) || (uVal.rhythm && uVal.rhythm.detail) || (score > 0 ? score + '점' : '미참여');
+        date = (lbRecord && lbRecord.date) || (uVal.rhythm && uVal.rhythm.date) || '';
+        accuracy = lbRecord && typeof lbRecord.accuracy === 'number' ? lbRecord.accuracy : null;
 
         list.push({
           uid: uid,
@@ -2499,8 +2417,8 @@ function loadAdminUserList() {
         '<td><code>' + (u.studentId || u.uid) + '</code></td>' +
         '<td>' + (u.school || '-') + '</td>' +
         '<td><span style="color:var(--cyan); font-weight:bold;">' + (u.rhythmScore || 0) + '점</span></td>' +
-        '<td><span style="color:var(--violet); font-weight:bold;">' + (u.quizScore || 0) + '점</span></td>' +
-        '<td><span style="color:var(--lime); font-weight:bold;">' + (u.totalScore || 0) + '점</span></td>' +
+        '<td><span style="color:var(--violet); font-weight:bold;">' + (u.quizScore || 0) + '개</span></td>' +
+        '<td><span style="color:var(--lime); font-weight:bold;">' + (u.rhythmRankScore || 0) + '점</span>' + (u.rankScoreV2 ? '' : ' <small style="color:var(--muted);">(구방식)</small>') + '</td>' +
         '<td style="color:var(--muted); font-size:12px;">' + dateStr + '</td>' +
         '<td>' +
           '<button type="button" class="btn secondary small" style="padding:4px 8px; font-size:11px; margin-right:4px;" onclick="openEditUserModal(\'' + u.uid + '\')">✏️ 수정</button>' +
@@ -2512,6 +2430,86 @@ function loadAdminUserList() {
   }).catch(function(err) {
     console.error("Admin user list error:", err);
     tbody.innerHTML = '<tr><td colspan="9" style="color:var(--coral); padding:20px;">회원 로드 오류 발생</td></tr>';
+  });
+}
+
+/* 랭킹 산정 방식 변경(정확도 기준) 마이그레이션.
+   예전 방식: 리듬게임 랭킹 점수 = "쌓은 점수 × 평균 정확도", 악보 퀴즈도 랭킹에 포함.
+   새 방식: 리듬게임 랭킹 점수 = 정확도 그 자체(8비트는 정확도의 80%, 16비트/8+16비트 혼합은 100%),
+   퀴즈는 랭킹에서 완전히 제외.
+   과거 데이터에는 판마다의 카테고리(8/16/혼합)별 정확도가 따로 저장되어 있지 않아서(전체 평균만
+   누적돼 있었음), 완벽한 재계산은 불가능하다. 대신 각 회원이 가장 최근에 남긴 리듬게임 기록
+   (users/{uid}/rhythm - 정확도와 카테고리 라벨 포함)을 기준으로 새 방식 점수를 산출해서 채워 넣는다.
+   이미 새 방식으로 저장된 회원(rankScoreV2===true)은 건너뛰므로 여러 번 눌러도 안전하다. */
+function guessCatKeyFromDetail(detail){
+  detail = detail || '';
+  if(detail.indexOf('혼합') !== -1) return 'mixed';
+  if(detail.indexOf('16비트') !== -1) return 'sixteen';
+  if(detail.indexOf('8비트') !== -1) return 'eight';
+  return 'sixteen'; // 카테고리를 알 수 없으면 100% 가중치(불이익 없는 쪽)로 처리
+}
+function migrateRankScoresToAccuracy(){
+  if(!db || !currentUser || !currentUser.isAdmin) return;
+  if(!confirm('기존 회원들의 랭킹 점수를 새 방식(정확도 기준)으로 다시 계산합니다.\n(이미 새 방식으로 저장된 회원은 건너뜁니다) 계속할까요?')) return;
+
+  db.ref('users').once('value').then(function(snap){
+    var updates = {};
+    var migrated = 0, skipped = 0, noRecord = 0;
+    snap.forEach(function(child){
+      var uid = child.key, u = child.val() || {};
+      if(u.isAdmin || uid === 'admin_juteacher') return;
+      if(u.rankScoreV2){ skipped++; return; }
+
+      var rhythmRec = u.rhythm || null;
+      if(!rhythmRec || typeof rhythmRec.accuracy !== 'number'){
+        // 리듬게임을 한 번도 하지 않은 회원은 랭킹 점수 0으로 새 방식 표시만 해둔다.
+        updates['users/' + uid + '/rhythmRankScore'] = 0;
+        updates['users/' + uid + '/rhythmAttempts'] = 0;
+        updates['users/' + uid + '/rhythmWAccSum'] = 0;
+        updates['users/' + uid + '/rankScoreV2'] = true;
+        db.ref('leaderboards/rhythm/' + uid).remove();
+        noRecord++;
+        return;
+      }
+
+      var acc = Math.max(0, Math.min(100, rhythmRec.accuracy));
+      var catKey = rhythmRec.catKey || guessCatKeyFromDetail(rhythmRec.detail);
+      var weight = catKey === 'eight' ? 0.8 : 1.0;
+      var rankScore = Math.round(acc * weight);
+      var displayName = (u.name || '') + (u.school ? (' (' + u.school + ')') : '');
+
+      var record = {
+        uid: uid,
+        studentId: u.studentId || '',
+        name: displayName,
+        score: rankScore,
+        accuracy: acc,
+        catKey: catKey,
+        detail: rhythmRec.detail || '',
+        date: rhythmRec.date || '',
+        timestamp: Date.now(),
+        rankVersion: 2
+      };
+
+      updates['users/' + uid + '/rhythmRankScore'] = rankScore;
+      updates['users/' + uid + '/rhythmAttempts'] = 1;
+      updates['users/' + uid + '/rhythmWAccSum'] = rankScore;
+      updates['users/' + uid + '/rankScoreV2'] = true;
+      updates['users/' + uid + '/rhythm'] = record;
+      updates['leaderboards/rhythm/' + uid] = record;
+      migrated++;
+    });
+
+    // 더 이상 쓰지 않는 랭킹(악보 퀴즈 / 전체 총점)은 삭제한다 - 랭킹에는 리듬게임만 남긴다.
+    updates['leaderboards/quiz'] = null;
+    updates['leaderboards/total'] = null;
+
+    db.ref().update(updates).then(function(){
+      alert('마이그레이션 완료!\n새 방식으로 변경: ' + migrated + '명\n기록 없음(0점 처리): ' + noRecord + '명\n이미 최신(건너뜀): ' + skipped + '명');
+      loadAdminUserList();
+    }).catch(function(err){
+      alert('마이그레이션 오류: ' + err.message);
+    });
   });
 }
 
@@ -2535,6 +2533,7 @@ window.deleteUserAccount = function(uid, name) {
   if (!db) return;
   
   db.ref('users/' + uid).remove().then(function() {
+    db.ref('authSecrets/' + uid).remove();
     db.ref('leaderboards/quiz/' + uid).remove();
     db.ref('leaderboards/rhythm/' + uid).remove();
     db.ref('leaderboards/total/' + uid).remove();
@@ -2562,13 +2561,17 @@ function saveUserEdit() {
     studentId: studentId,
     school: school
   };
+
+  var jobs = [db.ref('users/' + uid).update(updates)];
   if (newPassword) {
-    updates.passwordHash = newPassword;
+    // 비밀번호는 users/{uid}가 아니라 별도의 authSecrets/{uid}에 저장한다 (랭킹 등에서 노출되지 않도록).
+    jobs.push(db.ref('authSecrets/' + uid).set({ passwordHash: newPassword }));
+    jobs.push(db.ref('users/' + uid + '/passwordHash').remove()); // 예전 방식으로 저장된 비밀번호가 남아있다면 정리
   }
 
-  db.ref('users/' + uid).update(updates).then(function() {
+  Promise.all(jobs).then(function() {
     db.ref('leaderboards/rhythm/' + uid).update({ studentId: studentId, name: name + (school ? (' (' + school + ')') : '') });
-    
+
     alert('회원 정보가 수정되었습니다.');
     $('editUserModal').classList.remove('show');
     loadAdminUserList();
@@ -2629,11 +2632,9 @@ function init(){
   $('loginForm').onsubmit = function(e){ e.preventDefault(); handleLogin($('loginEmail').value, $('loginPassword').value); };
   $('signupForm').onsubmit = function(e){ e.preventDefault(); handleSignup($('signupName').value, $('signupId').value, $('signupSchool').value, $('signupPassword').value); };
   $('logoutBtn').onclick = handleLogout;
-  $('openRankBtn').onclick = function(){ loadLeaderboard('rhythm'); $('rankingModal').classList.add('show'); armBackNav(); };
+  $('openRankBtn').onclick = function(){ loadLeaderboard(); $('rankingModal').classList.add('show'); armBackNav(); };
   $('closeRankModal').onclick = function(){ $('rankingModal').classList.remove('show'); };
-  $('rankTabRhythm').onclick = function(){ loadLeaderboard('rhythm'); };
-  $('rankTabQuiz').onclick = function(){ loadLeaderboard('quiz'); };
-  $('rankTabTotal').onclick = function(){ loadLeaderboard('total'); };
+  if($('migrateRankBtn')) $('migrateRankBtn').onclick = migrateRankScoresToAccuracy;
   $('openConfigBtn').onclick = function(){ $('cfgApiKey').value = localStorage.getItem('drum_fb_apikey')||''; $('configModal').classList.add('show'); armBackNav(); };
   $('closeConfigModal').onclick = function(){ $('configModal').classList.remove('show'); };
   $('saveConfigBtn').onclick = function(){
