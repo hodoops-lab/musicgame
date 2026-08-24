@@ -1565,10 +1565,13 @@ function buildCatGrid(){
 function buildLevelGrid(catKey){
   $('stageCatLabel').textContent = CATS[catKey].label;
   var el = $('rLevelGrid'); el.innerHTML='';
-  var practiceCard = document.createElement('div'); practiceCard.className='level-card practice-card';
-  practiceCard.innerHTML = '<div class="lv-num">학습하기</div><div class="lv-bpm">같은 4마디 반복 연습 · 60 BPM</div>';
-  practiceCard.onclick = function(){ startRPractice(catKey); };
-  el.appendChild(practiceCard);
+  // 8+16비트 혼합은 학습하기(반복 연습) 카드를 두지 않는다 — 8비트/16비트만 학습하기를 제공한다.
+  if(catKey!=='mixed'){
+    var practiceCard = document.createElement('div'); practiceCard.className='level-card practice-card';
+    practiceCard.innerHTML = '<div class="lv-num">학습하기</div><div class="lv-bpm">같은 4마디 반복 연습 · 60 BPM</div>';
+    practiceCard.onclick = function(){ startRPractice(catKey); };
+    el.appendChild(practiceCard);
+  }
   var totalStages = stagesForCat(catKey);
   for(var s=1; s<=totalStages; s++){
     var bpm = catKey==='sixteen' ? sixteenStageBpm(s) : stageBpm(s);
@@ -1888,11 +1891,12 @@ function rResolve(note, grade){
   else { rstate.combo=0; rstate.counts.miss++; }
 
   // 한 박(beat) 단위 채점: 이 박(같은 groupId)의 실제 음표를 모두 채점했고, 전부 놓치지 않았을 때만 점수를 준다.
+  // 단, 학습하기(반복 연습) 모드는 점수를 매기는 화면이 아니므로 점수는 절대 올리지 않는다 — 1~10단계 문제에서만 점수를 준다.
   var beat = rstate.beatGroups[note.groupId];
   if(beat){
     beat.done++;
     if(grade==='miss') beat.allGood = false;
-    if(beat.total>0 && beat.done>=beat.total && beat.allGood){
+    if(!rstate.practice && beat.total>0 && beat.done>=beat.total && beat.allGood){
       rstate.score += beat.tier;
     }
   }
