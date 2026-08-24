@@ -274,6 +274,7 @@
       <div class="user-info">
         <span id="userDisplayName">👤 게스트 (랭킹 미등록)</span>
         <span class="user-badge" id="userScoreBadge">자유 플레이</span>
+        <span class="user-badge hidden" id="userRankBadge"></span>
       </div>
       <div class="user-actions">
         <button class="btn secondary small" id="openRankBtn" type="button">🏆 랭킹</button>
@@ -2018,9 +2019,43 @@ function setGuestUser() {
   localStorage.removeItem('drum_current_email');
   $('userDisplayName').textContent = '👤 게스트 (랭킹 미등록)';
   $('userScoreBadge').textContent = '자유 플레이';
+  $('userRankBadge').classList.add('hidden'); $('userRankBadge').textContent = '';
   $('openAuthBtn').classList.remove('hidden');
   $('logoutBtn').classList.add('hidden');
   $('openAdminBtn').classList.add('hidden');
+}
+
+// 아이디 옆 배지에 "전체 몇 등"인지 표시한다 (요청: 2026-08-24). 게스트/관리자는 순위 대상이 아니므로
+// 표시하지 않는다. leaderboards가 아니라 users를 통째로 훑어서 계산하는 이유는 loadLeaderboard()와
+// 정확히 같은 방식(회원 전원 기준)으로 순위를 매기기 위함 - 다른 기준으로 계산하면 랭킹 모달에서
+// 보이는 등수와 여기 배지의 등수가 어긋날 수 있다.
+function updateMyRankBadge(){
+  var badge = $('userRankBadge');
+  if(!badge) return;
+  if(!currentUser || !currentUser.uid || currentUser.isAdmin || !db){
+    badge.classList.add('hidden'); badge.textContent = '';
+    return;
+  }
+  db.ref('users').once('value').then(function(usersSnap){
+    var list = [];
+    usersSnap.forEach(function(child){
+      var uid = child.key, u = child.val() || {};
+      if(u.isAdmin || uid === 'admin_juteacher' || u.studentId === 'juteacher' || (u.email && u.email.includes('juteacher'))) return;
+      list.push({ uid: uid, score: Number(u.rhythmRankScore) || 0 });
+    });
+    list.sort(function(a,b){ return b.score - a.score; });
+    var myIdx = -1;
+    for(var i=0;i<list.length;i++){ if(list[i].uid === currentUser.uid){ myIdx = i; break; } }
+    if(myIdx === -1){
+      badge.classList.add('hidden'); badge.textContent = '';
+      return;
+    }
+    badge.textContent = '🏅 전체 ' + (myIdx+1) + '등 / ' + list.length + '명';
+    badge.classList.remove('hidden');
+  }).catch(function(err){
+    console.error('[내 순위 조회 오류]', err);
+    badge.classList.add('hidden'); badge.textContent = '';
+  });
 }
 
 function fetchUserProfile(uid, email, defaultName) {
@@ -2029,6 +2064,7 @@ function fetchUserProfile(uid, email, defaultName) {
     currentUser = { uid: 'admin_juteacher', name: '선생님 (관리자)', studentId: 'juteacher', school: '관리자', email: 'juteacher@drum.school', isAdmin: true, score: 0 };
     $('userDisplayName').textContent = '👑 관리자 (juteacher)';
     $('userScoreBadge').textContent = '관리자 모드';
+    $('userRankBadge').classList.add('hidden'); $('userRankBadge').textContent = '';
     $('openAuthBtn').classList.add('hidden');
     $('logoutBtn').classList.remove('hidden');
     $('openAdminBtn').classList.remove('hidden');
@@ -2075,6 +2111,7 @@ function fetchUserProfile(uid, email, defaultName) {
       $('userDisplayName').textContent = '👤 ' + name + (val.school ? (' (' + val.school + ')') : '');
       $('userScoreBadge').textContent = '랭킹 점수: ' + score + '점';
       $('openAdminBtn').classList.add('hidden');
+      updateMyRankBadge();
     }
 
     $('openAuthBtn').classList.add('hidden');
@@ -2295,6 +2332,7 @@ function saveGameScore(gameType, scoreDetail) {
     currentUser.rhythmAttempts = newAttempts;
     currentUser.score = rankScore;
     $('userScoreBadge').textContent = '랭킹 점수: ' + rankScore + '점';
+    updateMyRankBadge();
   }).catch(function(err){
     // 저장이 실패하면 화면 점수와 실제 DB 점수가 어긋날 수 있으므로, 성공했다고 조용히 넘어가지 않고
     // 눈에 띄게 표시한다 (2026-08-24: 일부 학생 점수가 저장이 안 되는 문제가 있었음).
