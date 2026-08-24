@@ -536,7 +536,7 @@
       <h2 class="stitle" style="text-align:center;">👑 회원 관리 (관리자 전용)</h2>
       <p style="font-size:12px; color:var(--muted); text-align:center; margin-bottom:14px;">등록된 가입 회원 목록을 조회하고 랭킹 점수 확인 및 계정 정보를 수정/삭제할 수 있습니다. (퀴즈는 참고용 기록일 뿐 랭킹에는 반영되지 않습니다)</p>
       <div style="display:flex; justify-content:center; margin-bottom:10px;">
-        <button class="btn secondary small" id="migrateRankBtn" type="button">🔄 랭킹 점수 재계산 (정확도 기준으로 마이그레이션)</button>
+        <button class="btn secondary small" id="migrateRankBtn" type="button">🔄 랭킹 점수 재계산 (리듬 누적점수와 동기화)</button>
       </div>
       <div id="adminUserContainer" style="max-height:400px; overflow-y:auto;">
         <table class="rank-table">
@@ -546,7 +546,7 @@
               <th>이름</th>
               <th>학번</th>
               <th>학교명</th>
-              <th>리듬 누적점수(참고용)</th>
+              <th>리듬 누적점수 = 랭킹 점수</th>
               <th>퀴즈 정답수(랭킹 제외)</th>
               <th>랭킹 점수</th>
               <th>가입일</th>
@@ -2028,8 +2028,7 @@ function fetchUserProfile(uid, email, defaultName) {
       score: score,
       isAdmin: isAdmin,
       rhythmScore: val.rhythmScore || 0,
-      rhythmAttempts: val.rhythmAttempts || 0,
-      rhythmWAccSum: val.rhythmWAccSum || 0
+      rhythmAttempts: val.rhythmAttempts || 0
     };
 
     localStorage.setItem('drum_current_uid', uid);
@@ -2219,23 +2218,20 @@ function saveGameScore(gameType, scoreDetail) {
   var uid = currentUser.uid;
   var displayName = currentUser.name + (currentUser.school ? (' (' + currentUser.school + ')') : '');
 
-  // 게임 내 누적 점수(코인)는 랭킹에는 더 이상 쓰이지 않지만 개인 기록용으로 계속 쌓아둔다.
-  var newRhythm = (currentUser.rhythmScore || 0) + scoreDetail.score;
-
-  // ---- 랭킹(순위) 산정용 점수: "정확도" 그 자체를 카테고리 가중치로 보정해서 판마다 누적(합산) ----
-  // 8비트는 정확도의 80%만, 16비트/8+16비트 혼합은 정확도의 100%를 이번 판 점수로 얻고,
-  // 플레이할 때마다 랭킹 점수에 계속 더해진다(누적) - 많이/꾸준히 연습할수록 점수가 올라가되,
-  // 정확도가 높을수록 한 판에 더 많이 쌓이므로 "그냥 많이 하면 유리"해지지는 않는다.
-  // (예전엔 누적 평균을 냈었는데, 그러면 플레이해도 점수가 안 오르는 것처럼 보여서 - 2026-08-24 -
-  // 합산 방식으로 바꿈. 되돌리지 말 것.)
+  // ---- "리듬 누적점수"와 "랭킹 점수"는 완전히 같은 값이다 (요청: 두 숫자가 달라서 헷갈림, 2026-08-24) ----
+  // 이번 판에서 얻은 게임 점수(rstate.score, 박자를 맞춰서 얻은 점수)에 카테고리 가중치를 곱해서
+  // (8비트=80%, 16비트/8+16비트 혼합=100%) 누적 총점에 더한다. 이 누적 총점 하나가
+  // users/{uid}.rhythmScore 와 users/{uid}.rhythmRankScore 양쪽에 "동일하게" 저장된다 -
+  // 절대 서로 다른 두 숫자로 다시 쪼개지 말 것(회원관리 화면의 "리듬 누적점수"와 "랭킹 점수"
+  // 컬럼이 항상 똑같이 나와야 한다는 요구사항).
   var roundAcc = Math.max(0, Math.min(100, scoreDetail.accuracy || 0));
   var catKey = scoreDetail.catKey || 'sixteen';
   var weight = catKey === 'eight' ? 0.8 : 1.0; // 16비트 / 8+16비트 혼합 = 100%
-  var weightedAcc = roundAcc * weight;
+  var weightedGain = Math.round((scoreDetail.score || 0) * weight);
 
   var newAttempts = (currentUser.rhythmAttempts || 0) + 1;
-  var newWAccSum = (currentUser.rhythmWAccSum || 0) + weightedAcc; // 누적 합산 - 이 값 자체가 랭킹 점수
-  var rankScore = Math.round(newWAccSum);
+  var newTotal = (currentUser.rhythmScore || 0) + weightedGain; // 리듬 누적점수 = 랭킹 점수
+  var rankScore = newTotal;
 
   var record = {
     uid: uid,
@@ -2251,20 +2247,18 @@ function saveGameScore(gameType, scoreDetail) {
   };
 
   var updates = {};
-  updates['users/' + uid + '/rhythmScore'] = newRhythm;
+  updates['users/' + uid + '/rhythmScore'] = newTotal;
   updates['users/' + uid + '/rhythmAttempts'] = newAttempts;
-  updates['users/' + uid + '/rhythmWAccSum'] = newWAccSum;
   updates['users/' + uid + '/rhythmRankScore'] = rankScore;
   updates['users/' + uid + '/rankScoreV2'] = true;
   updates['users/' + uid + '/rhythm'] = record;
   updates['leaderboards/rhythm/' + uid] = record;
 
   db.ref().update(updates).then(function(){
-    currentUser.rhythmScore = newRhythm;
+    currentUser.rhythmScore = newTotal;
     currentUser.rhythmAttempts = newAttempts;
-    currentUser.rhythmWAccSum = newWAccSum;
     currentUser.score = rankScore;
-    $('userScoreBadge').textContent = '랭킹 점수: ' + rankScore + '점 (정확도 누적)';
+    $('userScoreBadge').textContent = '랭킹 점수: ' + rankScore + '점';
   }).catch(function(err){
     // 저장이 실패하면 화면 점수와 실제 DB 점수가 어긋날 수 있으므로, 성공했다고 조용히 넘어가지 않고
     // 눈에 띄게 표시한다 (2026-08-24: 일부 학생 점수가 저장이 안 되는 문제가 있었음).
@@ -2459,48 +2453,19 @@ function loadAdminUserList() {
   });
 }
 
-/* 랭킹 산정 방식 변경(정확도 기준) 마이그레이션.
-   예전 방식: 리듬게임 랭킹 점수 = "쌓은 점수 × 평균 정확도", 악보 퀴즈도 랭킹에 포함.
-   새 방식: 리듬게임 랭킹 점수 = 정확도 그 자체(8비트는 정확도의 80%, 16비트/8+16비트 혼합은 100%),
-   퀴즈는 랭킹에서 완전히 제외.
-   과거 데이터에는 판마다의 카테고리(8/16/혼합)별 정확도가 따로 저장되어 있지 않아서(전체 평균만
-   누적돼 있었음), 완벽한 재계산은 불가능하다. 대신 각 회원이 가장 최근에 남긴 리듬게임 기록
-   (users/{uid}/rhythm - 정확도와 카테고리 라벨 포함)을 기준으로 새 방식 점수를 산출해서 채워 넣는다.
-   이미 새 방식으로 저장된 회원(rankScoreV2===true)은 건너뛰므로 여러 번 눌러도 안전하다. */
-function guessCatKeyFromDetail(detail){
-  detail = detail || '';
-  if(detail.indexOf('혼합') !== -1) return 'mixed';
-  if(detail.indexOf('16비트') !== -1) return 'sixteen';
-  if(detail.indexOf('8비트') !== -1) return 'eight';
-  return 'sixteen'; // 카테고리를 알 수 없으면 100% 가중치(불이익 없는 쪽)로 처리
-}
-// rec.accuracy가 숫자로 없어도, detail 문구("...16비트 4단계 (72%)")에 정확도가 % 로 박혀있는
-// 경우가 많아서 거기서라도 뽑아낸다. 그래도 못 찾으면 null(=판단 불가, 함부로 0 처리하지 않음).
-function extractAccuracy(rec){
-  if(!rec) return null;
-  // Number()로 강제 변환 - accuracy가 어떤 이유로 문자열("85")로 저장돼 있어도 잡아내기 위함.
-  var n = Number(rec.accuracy);
-  if(!isNaN(n) && rec.accuracy !== null && rec.accuracy !== '' && rec.accuracy !== undefined) return n;
-  if(typeof rec.detail === 'string'){
-    var m = rec.detail.match(/\((\d+)\s*%\)/);
-    if(m) return parseInt(m[1], 10);
-  }
-  return null;
-}
+/* 랭킹 점수 동기화 마이그레이션.
+   요구사항(2026-08-24, 실제 수업 중 확정): "리듬 누적점수"(rhythmScore)와 "랭킹 점수"
+   (rhythmRankScore)는 항상 같은 숫자여야 한다. saveGameScore()는 이제 두 필드에 매번 같은 값을
+   쓰지만, 과거(이 정책 이전)에 쌓인 회원들은 rhythmScore만 있고 rhythmRankScore가 없거나 다른
+   값으로 남아있을 수 있으므로, 이 버튼으로 rhythmRankScore를 rhythmScore와 강제로 맞춘다.
+   (예전엔 정확도%를 따로 계산해서 랭킹 점수로 썼었는데, 그러면 두 숫자가 서로 달라서 헷갈린다는
+   피드백으로 폐기함 - 정확도 기반 재계산 로직을 다시 넣지 말 것.) */
 function migrateRankScoresToAccuracy(){
   if(!db || !currentUser || !currentUser.isAdmin) return;
-  if(!confirm('기존 회원들의 랭킹 점수를 새 방식(정확도 기준)으로 다시 계산합니다.\n(이미 새 방식으로 저장된 회원은 건너뜁니다) 계속할까요?')) return;
+  if(!confirm('모든 회원의 "랭킹 점수"를 "리듬 누적점수"와 같은 값으로 맞춥니다. 계속할까요?')) return;
 
-  Promise.all([
-    db.ref('users').once('value'),
-    db.ref('leaderboards/rhythm').once('value')
-  ]).then(function(results){
-    var usersSnap = results[0];
-    var lbSnap = results[1];
-    var lbMap = {};
-    if(lbSnap && lbSnap.exists()) lbSnap.forEach(function(c){ lbMap[c.key] = c.val(); });
-
-    var migrated = 0, skipped = 0, noRecord = 0, unresolved = 0;
+  db.ref('users').once('value').then(function(usersSnap){
+    var synced = 0, alreadyOk = 0;
     var errorList = []; // { studentId, message } - 한 명이 실패해도 전체가 막히지 않도록 개별 처리한다.
     var jobs = []; // 회원별 db 쓰기 Promise 모음 - 하나가 실패해도 다른 회원 처리는 계속 진행된다.
 
@@ -2508,75 +2473,38 @@ function migrateRankScoresToAccuracy(){
       try {
         var uid = child.key, u = child.val() || {};
         if(u.isAdmin || uid === 'admin_juteacher') return;
-        // 이미 새 방식으로 저장돼있고 점수가 0점이 아니면(정상적으로 산출된 값이면) 건너뛴다.
-        // 0점인 회원은 - 이전에 있었던 버그로 잘못 0점 처리됐을 수 있으므로 - 다시 시도한다(안전:
-        // 진짜로 한 번도 플레이 안 한 회원은 아래 로직에서 어차피 다시 0점으로 나온다).
-        if(u.rankScoreV2 && u.rhythmRankScore > 0){ skipped++; return; }
 
-        // users/{uid}/rhythm 뿐 아니라 leaderboards/rhythm/{uid}에도 기록이 남아있을 수 있어서
-        // 둘 다 살펴보고, 정확도는 두 군데 중 먼저 찾아지는 값을 쓴다.
-        var rec1 = u.rhythm || null;
-        var rec2 = lbMap[uid] || null;
-        var acc = extractAccuracy(rec1);
-        if(acc == null) acc = extractAccuracy(rec2);
+        var target = u.rhythmScore || 0; // 리듬 누적점수 - 이 값이 곧 랭킹 점수가 돼야 한다.
+        if(u.rankScoreV2 && u.rhythmRankScore === target){ alreadyOk++; return; }
 
-        var everPlayed = !!rec1 || !!rec2 || (u.rhythmScore && u.rhythmScore > 0);
-
-        if(!everPlayed){
-          // 리듬게임을 정말 한 번도 하지 않은 회원만 랭킹 점수 0으로 새 방식 표시를 해둔다.
-          jobs.push(db.ref('users/' + uid).update({ rhythmRankScore:0, rhythmAttempts:0, rhythmWAccSum:0, rankScoreV2:true })
-            .then(function(){ return db.ref('leaderboards/rhythm/' + uid).remove(); })
-            .catch(function(err){ errorList.push({ studentId: u.studentId || uid, message: err.message }); }));
-          noRecord++;
-          return;
-        }
-
-        if(acc == null){
-          // 플레이한 기록은 있는데 정확도를 어디서도 못 찾은 경우 - 잘못 0점으로 지워버리지 않도록
-          // 그대로 두고 건너뛴다(rankScoreV2를 세팅하지 않으므로 나중에 다시 시도하거나, 학생이
-          // 리듬게임을 한 번 더 플레이하면 saveGameScore()가 자동으로 새 방식 점수를 채운다).
-          unresolved++;
-          return;
-        }
-
-        acc = Math.max(0, Math.min(100, acc));
-        var catKey = (rec1 && rec1.catKey) || (rec2 && rec2.catKey) || guessCatKeyFromDetail((rec1 && rec1.detail) || (rec2 && rec2.detail) || '');
-        var weight = catKey === 'eight' ? 0.8 : 1.0;
-        var rankScore = Math.round(acc * weight);
         var displayName = (u.name || '') + (u.school ? (' (' + u.school + ')') : '');
-        var detail = (rec1 && rec1.detail) || (rec2 && rec2.detail) || '';
-        var date = (rec1 && rec1.date) || (rec2 && rec2.date) || '';
-
+        var existing = u.rhythm || {};
         var record = {
           uid: uid,
           studentId: u.studentId || '',
           name: displayName,
-          score: rankScore,
-          accuracy: acc,
-          catKey: catKey,
-          detail: detail,
-          date: date,
+          score: target,
+          accuracy: typeof existing.accuracy === 'number' ? existing.accuracy : null,
+          catKey: existing.catKey || '',
+          detail: existing.detail || '',
+          date: existing.date || '',
           timestamp: Date.now(),
           rankVersion: 2
         };
 
-        // 회원 한 명당 독립된 update() 호출 - 예전엔 전체 회원을 한 번의 다중 경로 update()로
-        // 묶어서 보냈는데, 그러면 그중 한 명이라도 값이 이상해서 규칙에 걸리면 전체가 통째로
-        // 실패해서 아무도 갱신 안 되는 문제가 있었을 수 있다(2026-08-24). 절대 다시 한 번의
-        // update()로 묶지 말 것 - 반드시 회원별로 따로 쓰고 실패해도 나머지는 계속 진행되게 할 것.
+        // 회원 한 명당 독립된 update() 호출 - 전체를 하나의 다중 경로 update()로 묶으면 그중
+        // 한 명이라도 실패할 때 전체가 통째로 실패해서 아무도 갱신이 안 되는 문제가 있었다
+        // (2026-08-24). 절대 다시 하나의 update() 호출로 합치지 말 것.
         var job = db.ref('users/' + uid).update({
-          rhythmRankScore: rankScore,
-          rhythmAttempts: 1,
-          rhythmWAccSum: rankScore,
-          rankScoreV2: true,
-          rhythm: record
+          rhythmRankScore: target,
+          rankScoreV2: true
         }).then(function(){
           return db.ref('leaderboards/rhythm/' + uid).set(record);
         }).catch(function(err){
           errorList.push({ studentId: u.studentId || uid, message: err.message });
         });
         jobs.push(job);
-        migrated++;
+        synced++;
       } catch(loopErr){
         // 회원 한 명 처리 중 예상 못한 예외가 나도 나머지 회원 처리(forEach)는 계속돼야 한다.
         console.error('[마이그레이션 개별 처리 오류]', loopErr);
@@ -2590,8 +2518,7 @@ function migrateRankScoresToAccuracy(){
     jobs.push(db.ref('leaderboards/total').remove().catch(function(){}));
 
     Promise.all(jobs).then(function(){
-      var msg = '마이그레이션 완료!\n새 방식으로 변경: ' + migrated + '명\n리듬게임 기록 없음(0점): ' + noRecord + '명\n이미 최신(건너뜀): ' + skipped + '명';
-      if(unresolved > 0) msg += '\n정확도 확인 불가(건드리지 않고 건너뜀): ' + unresolved + '명 - 해당 학생이 리듬게임을 한 번 더 플레이하면 자동으로 채워집니다.';
+      var msg = '마이그레이션 완료!\n랭킹 점수를 리듬 누적점수와 맞춤: ' + synced + '명\n이미 일치(건너뜀): ' + alreadyOk + '명';
       if(errorList.length > 0){
         msg += '\n\n⚠️ 저장 실패 ' + errorList.length + '명:\n' + errorList.slice(0,10).map(function(e){ return '- ' + e.studentId + ': ' + e.message; }).join('\n');
         console.error('[마이그레이션 저장 실패 목록]', errorList);
