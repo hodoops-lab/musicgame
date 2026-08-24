@@ -2440,7 +2440,10 @@ function loadAdminUserList() {
         '<td><code>' + (u.studentId || u.uid) + '</code></td>' +
         '<td>' + (u.school || '-') + '</td>' +
         '<td><span style="color:var(--cyan); font-weight:bold;">' + (u.rhythmScore || 0) + '점</span></td>' +
-        '<td><span style="color:var(--violet); font-weight:bold;">' + (u.quizScore || 0) + '개</span></td>' +
+        // quizScore 필드는 실제로 "정답 개수 × 10점"이 저장돼 있다(finishQuiz()의 옛 채점 방식).
+        // "정답수"라는 라벨에 맞게 10으로 나눠서 실제 개수로 보여준다 - 그냥 quizScore를 그대로
+        // 찍으면 정답 개수가 10배로 부풀려 보이는 버그가 있었음(2026-08-24).
+        '<td><span style="color:var(--violet); font-weight:bold;">' + Math.round((u.quizScore || 0) / 10) + '개</span></td>' +
         '<td><span style="color:var(--lime); font-weight:bold;">' + (u.rhythmRankScore || 0) + '점</span>' + (u.rankScoreV2 ? '' : ' <small style="color:var(--muted);">(구방식)</small>') + '</td>' +
         '<td style="color:var(--muted); font-size:12px;">' + dateStr + '</td>' +
         '<td>' +
