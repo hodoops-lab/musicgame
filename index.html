@@ -1346,6 +1346,7 @@ function buildScoreBoard(){
     row._beamSvg = beamSvg;
     var ph = document.createElement('div'); ph.className='playhead'; ph.style.left='4%';
     row.appendChild(ph);
+    row._playheadEl = ph; // 매 프레임 querySelector로 다시 찾지 않도록 참조를 캐싱해둔다
     if(rstate.rowLabels && rstate.rowLabels[r]!=null){
       var lbl = document.createElement('div'); lbl.className='row-label'; lbl.textContent = rstate.rowLabels[r];
       row.appendChild(lbl);
@@ -1677,6 +1678,12 @@ function startRSession(catKey, stage, isPractice, focusIdx){
   rstate.rowDur = built.totalTime / rstate.rows;
   rstate.ticks = buildMetronomeTicks(bpm, built.totalTime);
   rstate.activeRow = -1;
+  // rTick()이 매 프레임(초당 60번)마다 notes/ticks 배열 전체를 훑지 않도록, 이미 시간순으로 정렬돼
+  // 있는 배열을 포인터로만 앞으로 훑는다. 음표/박이 많은 단계(특히 16분음표가 많은 8+16비트 혼합)에서
+  // 매 프레임 전체 스캔 때문에 생기던 끊김을 줄여준다.
+  rstate.missCheckPtr = 0;
+  rstate.tickPtr = 0;
+  rstate.pendingCount = rstate.notes.reduce(function(acc,n){ return acc + (n.resolved ? 0 : 1); }, 0);
   rstate.score=0; rstate.combo=0; rstate.maxCombo=0; rstate.counts={perfect:0,good:0,miss:0};
   rstate.running = false;
 
@@ -1751,14 +1758,24 @@ function rTick(){
   var now = actx.currentTime;
   var elapsed = now - rstate.startAt;
 
-  rstate.notes.forEach(function(note){
-    if(!note.resolved && (now-(rstate.startAt+note.time)) > MISS_W){ rResolve(note,'miss'); }
-  });
+  /* notes/ticks 배열은 이미 시간순으로 정렬돼 있으므로, 매 프레임 배열 전체를 훑는 대신
+     포인터를 앞으로만 진행시키며 "아직 마감 시각이 안 된 지점"을 만나면 즉시 멈춘다.
+     음표가 많은 단계(특히 16분음표가 많은 8+16비트 혼합)일수록 매 프레임 O(n) 스캔의 부담이
+     커서 끊김의 원인이 됐는데, 이렇게 하면 프레임당 비용이 "이번에 새로 마감된 것들"만큼으로 줄어든다. */
+  while(rstate.missCheckPtr < rstate.notes.length){
+    var note = rstate.notes[rstate.missCheckPtr];
+    if((now-(rstate.startAt+note.time)) <= MISS_W) break;
+    if(!note.resolved){ rResolve(note,'miss'); }
+    rstate.missCheckPtr++;
+  }
 
-  rstate.ticks.forEach(function(tk){
+  while(rstate.tickPtr < rstate.ticks.length){
+    var tk = rstate.ticks[rstate.tickPtr];
     var absT = rstate.startAt + tk.time;
-    if(!tk.played && now>=absT){ playMetronomeTick(now); tk.played=true; }
-  });
+    if(now < absT) break;
+    if(!tk.played){ playMetronomeTick(now); tk.played=true; }
+    rstate.tickPtr++;
+  }
 
   /* 노트는 움직이지 않고 고정되어 있고, 재생헤드(playhead)가 현재 마디 줄을 따라 진행한다. */
   var activeRow = Math.max(0, Math.min(rstate.rows-1, Math.floor(elapsed/rstate.rowDur)));
@@ -1768,12 +1785,12 @@ function rTick(){
     rstate.activeRow = activeRow;
   }
   var rowProgress = Math.max(0, Math.min(1, (elapsed - activeRow*rstate.rowDur)/rstate.rowDur));
-  rstate.rowEls[activeRow].querySelector('.playhead').style.left = (4 + rowProgress*92) + '%';
+  rstate.rowEls[activeRow]._playheadEl.style.left = (4 + rowProgress*92) + '%';
 
   var totalDur = rstate.totalTime + MISS_W + 0.2;
   $('rProgressFill').style.width = Math.min(100,Math.max(0,(elapsed/totalDur)*100)) + '%';
 
-  var allResolved = rstate.notes.every(function(n){ return n.resolved; });
+  var allResolved = rstate.pendingCount <= 0;
   if(allResolved && elapsed > totalDur){
     if(rstate.practice){
       // 학습하기 모드: 같은 4마디를 계속 반복 - 시작 시각을 한 바퀴만큼 밀고 판정/색을 초기화
@@ -1798,6 +1815,10 @@ function resetPracticeLoop(){
     }
   });
   rstate.ticks.forEach(function(tk){ tk.played=false; });
+  // 반복 연습이 다음 바퀴로 넘어갈 때, rTick()의 포인터/카운터도 처음부터 다시 훑도록 되돌린다.
+  rstate.missCheckPtr = 0;
+  rstate.tickPtr = 0;
+  rstate.pendingCount = rstate.notes.reduce(function(acc,n){ return acc + (n.resolved ? 0 : 1); }, 0);
   // 박 단위 채점 상태도 다음 바퀴를 위해 초기화한다 (안 그러면 두 번째 바퀴부터 점수가 안 들어감)
   Object.keys(rstate.beatGroups).forEach(function(gid){
     rstate.beatGroups[gid].done = 0;
@@ -1850,6 +1871,7 @@ function goStageSelectFromGame(){
 /* 채점 결과에 따라 음표 색을 바꾼다: 정답(완벽/좋음)=초록, 오답(놓침)=빨강.
    음표는 사라지지 않고 그대로 남아 방금 푼 문제의 정답/오답을 계속 보여준다. */
 function rResolve(note, grade){
+  if(!note.resolved) rstate.pendingCount = Math.max(0, (rstate.pendingCount||0) - 1);
   note.resolved=true; note.grade=grade;
   var color = grade==='miss' ? 'var(--coral)' : 'var(--lime)';
   var head = note.headEl;
