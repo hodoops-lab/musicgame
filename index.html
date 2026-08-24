@@ -2222,17 +2222,20 @@ function saveGameScore(gameType, scoreDetail) {
   // 게임 내 누적 점수(코인)는 랭킹에는 더 이상 쓰이지 않지만 개인 기록용으로 계속 쌓아둔다.
   var newRhythm = (currentUser.rhythmScore || 0) + scoreDetail.score;
 
-  // ---- 랭킹(순위) 산정용 점수: "정확도" 그 자체를 카테고리 가중치로 보정한 값 ----
-  // 8비트는 정확도의 80%만, 16비트/8+16비트 혼합은 정확도의 100%를 랭킹 점수로 반영한다.
-  // 여러 판 플레이한 정확도를 누적 평균 내서(순간 컨디션보다 꾸준한 실력이 반영되도록) 갱신한다.
+  // ---- 랭킹(순위) 산정용 점수: "정확도" 그 자체를 카테고리 가중치로 보정해서 판마다 누적(합산) ----
+  // 8비트는 정확도의 80%만, 16비트/8+16비트 혼합은 정확도의 100%를 이번 판 점수로 얻고,
+  // 플레이할 때마다 랭킹 점수에 계속 더해진다(누적) - 많이/꾸준히 연습할수록 점수가 올라가되,
+  // 정확도가 높을수록 한 판에 더 많이 쌓이므로 "그냥 많이 하면 유리"해지지는 않는다.
+  // (예전엔 누적 평균을 냈었는데, 그러면 플레이해도 점수가 안 오르는 것처럼 보여서 - 2026-08-24 -
+  // 합산 방식으로 바꿈. 되돌리지 말 것.)
   var roundAcc = Math.max(0, Math.min(100, scoreDetail.accuracy || 0));
   var catKey = scoreDetail.catKey || 'sixteen';
   var weight = catKey === 'eight' ? 0.8 : 1.0; // 16비트 / 8+16비트 혼합 = 100%
   var weightedAcc = roundAcc * weight;
 
   var newAttempts = (currentUser.rhythmAttempts || 0) + 1;
-  var newWAccSum = (currentUser.rhythmWAccSum || 0) + weightedAcc;
-  var rankScore = Math.round(newWAccSum / newAttempts);
+  var newWAccSum = (currentUser.rhythmWAccSum || 0) + weightedAcc; // 누적 합산 - 이 값 자체가 랭킹 점수
+  var rankScore = Math.round(newWAccSum);
 
   var record = {
     uid: uid,
@@ -2256,13 +2259,18 @@ function saveGameScore(gameType, scoreDetail) {
   updates['users/' + uid + '/rhythm'] = record;
   updates['leaderboards/rhythm/' + uid] = record;
 
-  db.ref().update(updates);
-
-  currentUser.rhythmScore = newRhythm;
-  currentUser.rhythmAttempts = newAttempts;
-  currentUser.rhythmWAccSum = newWAccSum;
-  currentUser.score = rankScore;
-  $('userScoreBadge').textContent = '랭킹 점수: ' + rankScore + '점 (정확도 기준)';
+  db.ref().update(updates).then(function(){
+    currentUser.rhythmScore = newRhythm;
+    currentUser.rhythmAttempts = newAttempts;
+    currentUser.rhythmWAccSum = newWAccSum;
+    currentUser.score = rankScore;
+    $('userScoreBadge').textContent = '랭킹 점수: ' + rankScore + '점 (정확도 누적)';
+  }).catch(function(err){
+    // 저장이 실패하면 화면 점수와 실제 DB 점수가 어긋날 수 있으므로, 성공했다고 조용히 넘어가지 않고
+    // 눈에 띄게 표시한다 (2026-08-24: 일부 학생 점수가 저장이 안 되는 문제가 있었음).
+    console.error('[saveGameScore 저장 실패]', err);
+    $('userScoreBadge').textContent = '⚠️ 점수 저장 실패 - 새로고침 후 다시 시도해주세요';
+  });
 }
 
 function loadLeaderboard() {

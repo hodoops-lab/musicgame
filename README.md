@@ -70,10 +70,18 @@ CSS/JS/이미지(base64)가 모두 그 안에 들어있습니다. 브라우저�
 - 리듬 게임의 "학습하기"(연습 모드, `rstate.practice`)는 같은 4마디를 무한 반복하는 루프라
   애초에 `finishRLevel()`(점수 저장이 일어나는 유일한 지점)까지 도달하지 않음 — 어떤 카테고리든
   학습하기는 점수를 주지 않는다. `finishRLevel()`에도 `if(!rstate.practice)` 이중 방어가 있음.
-- 여러 판을 플레이한 정확도는 누적 평균을 내서(`rhythmWAccSum / rhythmAttempts`) 랭킹 점수로 쓴다 —
-  순간 컨디션보다 꾸준한 실력이 반영되도록 하기 위함. 관련 필드: `users/{uid}.rhythmRankScore`
-  (현재 랭킹 점수), `rhythmAttempts`, `rhythmWAccSum`, `rankScoreV2`(마이그레이션 완료 표시).
-  `rhythmScore`(코인 누적 점수)는 더 이상 랭킹에 쓰이지 않고 개인 기록용으로만 남아있음.
+- 랭킹 점수는 판마다 (정확도 × 카테고리 가중치)를 **합산**한다 (`rhythmWAccSum` 자체가 랭킹 점수,
+  `rankScore = Math.round(rhythmWAccSum)`). 처음엔 누적 평균(`rhythmWAccSum / rhythmAttempts`)으로
+  했었는데, 그러면 플레이해도 점수가 안 오르는 것처럼 보인다는 실제 수업 중 피드백(2026-08-24)으로
+  합산 방식으로 바꿈 — **평균으로 되돌리지 말 것.** 정확도가 높을수록 한 판에 더 많이 쌓이므로
+  "그냥 많이 플레이하면 유리"해지는 옛 문제는 여전히 없음(낮은 정확도로 아무리 많이 해도 조금씩만
+  쌓임). 관련 필드: `users/{uid}.rhythmRankScore`(현재 랭킹 점수 = 누적 합계), `rhythmAttempts`,
+  `rhythmWAccSum`, `rankScoreV2`(마이그레이션 완료 표시). `rhythmScore`(코인 누적 점수)는 더 이상
+  랭킹에 쓰이지 않고 개인 기록용으로만 남아있음.
+- `saveGameScore()`의 DB 저장(`db.ref().update()`)은 이제 `.then()`/`.catch()`로 성공/실패를 확인한다 —
+  성공했을 때만 `currentUser`와 점수 배지를 갱신하고, 실패하면 배지에 "⚠️ 점수 저장 실패"를 띄우고
+  `console.error`로 남긴다. 예전엔 실패해도 조용히 넘어가서(화면엔 반영된 것처럼 보이지만 DB엔 저장
+  안 됨) 학생별로 점수가 안 쌓이는 원인을 알기 어려웠음 — 이 에러 처리를 다시 없애지 말 것.
 - 랭킹 모달(`rankingModal`)에는 리듬게임 랭킹만 표시 — 예전에 있던 "악보 퀴즈 랭킹"/"전체(총점) 랭킹"
   탭은 삭제됨. 다시 추가하지 말 것 (사용자가 명시적으로 없애달라고 요청함).
 - 관리자 화면(`adminModal`)에 **"🔄 랭킹 점수 재계산" 버튼**(`migrateRankScoresToAccuracy()`)이 있음 —
